@@ -28,6 +28,14 @@
 *.so.*
 *.dylib
 
+# Bin, build and lib directories
+bin/
+build/
+lib/
+
+# VS Code directory
+.vscode
+
 # Executables
 *.exe
 *.out
