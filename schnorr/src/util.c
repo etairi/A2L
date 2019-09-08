@@ -132,18 +132,6 @@ int generate_keys_and_write_to_file() {
 		ec_new(ec_pk_alice_tumbler);
 		ec_new(ec_pk_bob_tumbler);
 
-		// Compute Paillier public and secret keys.
-		// Assumes that RLC_BN_BITS is set to 4096.
-		if (cp_phpe_gen(paillier_pk_alice, paillier_sk_alice, RLC_BN_BITS / 2) != RLC_OK) {
-			THROW(ERR_CAUGHT);
-		}
-		if (cp_phpe_gen(paillier_pk_bob, paillier_sk_bob, RLC_BN_BITS / 2) != RLC_OK) {
-			THROW(ERR_CAUGHT);
-		}
-		if (cp_phpe_gen(paillier_pk_tumbler, paillier_sk_tumbler, RLC_BN_BITS / 2) != RLC_OK) {
-			THROW(ERR_CAUGHT);
-		}
-		
 		// Compute EC public and secret keys.
 		ec_curve_get_ord(q);
 		bn_rand_mod(ec_sk_alice, q);
@@ -159,6 +147,19 @@ int generate_keys_and_write_to_file() {
 		ec_add(ec_pk_bob_tumbler, ec_pk_bob, ec_pk_tumbler);
 		ec_norm(ec_pk_bob_tumbler, ec_pk_bob_tumbler);
 
+		// Compute Paillier public and secret keys.
+		// Assumes that RLC_BN_BITS is set to 4096.
+		if (cp_phpe_gen(paillier_pk_alice, paillier_sk_alice, RLC_BN_BITS / 2) != RLC_OK) {
+			THROW(ERR_CAUGHT);
+		}
+		if (cp_phpe_gen(paillier_pk_bob, paillier_sk_bob, RLC_BN_BITS / 2) != RLC_OK) {
+			THROW(ERR_CAUGHT);
+		}
+		if (cp_phpe_gen(paillier_pk_tumbler, paillier_sk_tumbler, RLC_BN_BITS / 2) != RLC_OK) {
+			THROW(ERR_CAUGHT);
+		}
+
+		// Create the filenames for the keys.
 		unsigned alice_key_file_length = strlen(ALICE_KEY_FILE_PREFIX) + strlen(KEY_FILE_EXTENSION) + 10;
 		char *alice_key_file_name = malloc(alice_key_file_length);
 		

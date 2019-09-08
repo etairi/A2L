@@ -82,7 +82,7 @@ int receive_message(tumbler_state_t state, void *socket) {
       THROW(ERR_CAUGHT);
     }
 
-    rc = zmq_msg_recv(&message, socket, ZMQ_DONTWAIT);
+    rc = zmq_msg_recv(&message, socket, 0);
     if (rc != -1 && handle_message(state, socket, message) != RLC_OK) THROW(ERR_CAUGHT);
   } CATCH_ANY {
     result_status = RLC_ERR;
