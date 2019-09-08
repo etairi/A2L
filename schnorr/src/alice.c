@@ -583,6 +583,8 @@ int main(void)
   PUZZLE_SHARED = 0;
   PUZZLE_SOLVED = 0;
 
+  unsigned long start_time, stop_time, total_time;
+
   alice_state_t state;
   alice_state_null(state);
 
@@ -625,6 +627,7 @@ int main(void)
       THROW(ERR_CAUGHT);
     }
 
+    start_time = timer();
     if (payment_init(socket) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
@@ -634,6 +637,9 @@ int main(void)
         THROW(ERR_CAUGHT);
       }
     }
+    stop_time = timer();
+    total_time = stop_time - start_time;
+    printf("\nPayment procedure time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
     if (rc) {

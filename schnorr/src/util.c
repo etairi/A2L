@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "relic/relic.h"
 #include "types.h"
 #include "util.h"
@@ -31,6 +32,19 @@ void memzero(void *ptr, size_t len) {
   typedef void *(*memset_t)(void *, int, size_t);
   static volatile memset_t memset_func = memset;
   memset_func(ptr, 0, len);
+}
+
+long long cpucycles(void) {
+	unsigned long long cycles;
+	asm volatile(".byte 15;.byte 49;shlq $32,%%rdx;orq %%rdx,%%rax"
+			: "=a" (cycles) ::  "%rdx");
+	return cycles;
+}
+
+long long timer(void) {
+	struct timespec time;
+	clock_gettime(CLOCK_REALTIME, &time);
+	return (long long) (time.tv_sec * CLOCK_PRECISION + time.tv_nsec);
 }
 
 void serialize_message(uint8_t **serialized,
