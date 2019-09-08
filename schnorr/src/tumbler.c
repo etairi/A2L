@@ -495,7 +495,6 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   uint8_t hash[RLC_MD_LEN];
 
   uint8_t *serialized_message = NULL;
-  uint8_t in[RLC_PAILLIER_CTX_SIZE];
   uint8_t out[RLC_PAILLIER_CTX_SIZE];
   int in_len = bn_size_bin(state->keys->paillier_pk->pk);
   int out_len = RLC_PAILLIER_CTX_SIZE - 1;

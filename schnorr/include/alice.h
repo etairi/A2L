@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <string.h>
 #include "relic/relic.h"
+#include "zmq.h"
 #include "types.h"
 
 #define TUMBLER_ENDPOINT  "tcp://localhost:8181"
