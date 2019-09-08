@@ -505,6 +505,7 @@ int puzzle_solve_handler(alice_state_t state, void *socket, uint8_t *data) {
     // Deserialize the data from the message.
     bn_read_bin(state->s, data, RLC_BN_SIZE);
 
+    // Extract the randomized secret.
     ec_curve_get_ord(q);
 
     bn_sub(gamma, state->s, state->s_hat);
@@ -535,7 +536,6 @@ int puzzle_solution_send(alice_state_t state, void *socket) {
 
   message_t puzzle_solution_send_msg;
   message_null(puzzle_solution_send_msg);
-
 
   TRY {
     // Build and define the message.

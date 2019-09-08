@@ -605,7 +605,7 @@ int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data)
 				verif_status = (verif_status == RLC_NE ? RLC_ERR : RLC_OK);
 
 				if (ev->used != state->e_prime->used) {
-					result_status = RLC_ERR;
+					verif_status = RLC_ERR;
 				}
 
         if (verif_status != RLC_OK) {

@@ -702,7 +702,7 @@ int payment_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 				verif_status = (verif_status == RLC_NE ? RLC_ERR : RLC_OK);
 
 				if (ev->used != state->e->used) {
-					result_status = RLC_ERR;
+					verif_status = RLC_ERR;
 				}
 
         if (verif_status != RLC_OK) {
