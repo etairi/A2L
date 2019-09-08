@@ -1,0 +1,8 @@
+find_library(RELIC relic HINTS /usr/local/lib)
+find_library(ZMQ zmq HINTS /usr/loca/lib)
+add_executable(alice alice.c util.c)
+target_link_libraries(alice ${RELIC} ${ZMQ})
+add_executable(bob bob.c util.c)
+target_link_libraries(bob ${RELIC} ${ZMQ})
+add_executable(tumbler tumbler.c util.c)
+target_link_libraries(tumbler ${RELIC} ${ZMQ})
