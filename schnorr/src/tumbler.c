@@ -248,6 +248,9 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_curve_get_ord(q);
     ec_get_x(x, R_prime);
     bn_mod(r, x, q);
+    if (bn_is_zero(r)) {
+      THROW(ERR_CAUGHT);
+    }
 
 		memcpy(tx_msg, tx, tx_len);
 		bn_write_bin(tx_msg + tx_len, RLC_FC_BYTES, r);
