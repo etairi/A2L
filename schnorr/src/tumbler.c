@@ -82,7 +82,7 @@ int receive_message(tumbler_state_t state, void *socket) {
       THROW(ERR_CAUGHT);
     }
 
-    rc = zmq_msg_recv(&message, socket, 0);
+    rc = zmq_msg_recv(&message, socket, ZMQ_DONTWAIT);
     if (rc != -1 && handle_message(state, socket, message) != RLC_OK) THROW(ERR_CAUGHT);
   } CATCH_ANY {
     result_status = RLC_ERR;
@@ -177,7 +177,7 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     memcpy(zmq_msg_data(&promise_init), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&promise_init, socket, 0);
+    rc = zmq_msg_send(&promise_init, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
@@ -297,7 +297,7 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     memcpy(zmq_msg_data(&promise_sign), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&promise_sign, socket, 0);
+    rc = zmq_msg_send(&promise_sign, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
@@ -386,7 +386,7 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     memcpy(zmq_msg_data(&promise_end_done), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&promise_end_done, socket, 0);
+    rc = zmq_msg_send(&promise_end_done, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
@@ -468,7 +468,7 @@ int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     memcpy(zmq_msg_data(&payment_init), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&payment_init, socket, 0);
+    rc = zmq_msg_send(&payment_init, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
@@ -609,7 +609,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     memcpy(zmq_msg_data(&payment_sign_done), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&payment_sign_done, socket, 0);
+    rc = zmq_msg_send(&payment_sign_done, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
@@ -734,7 +734,7 @@ int payment_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     memcpy(zmq_msg_data(&puzzle_solve), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&puzzle_solve, socket, 0);
+    rc = zmq_msg_send(&puzzle_solve, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);

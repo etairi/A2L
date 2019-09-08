@@ -78,7 +78,7 @@ int receive_message(alice_state_t state, void *socket) {
       THROW(ERR_CAUGHT);
     }
 
-    rc = zmq_msg_recv(&message, socket, 0);
+    rc = zmq_msg_recv(&message, socket, ZMQ_DONTWAIT);
     if (rc != -1 && handle_message(state, socket, message) != RLC_OK) THROW(ERR_CAUGHT);
   } CATCH_ANY {
     result_status = RLC_ERR;
@@ -124,7 +124,7 @@ int puzzle_share_handler(alice_state_t state, void *socket, uint8_t *data) {
     }
 
     memcpy(zmq_msg_data(&promise_share_done), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&promise_share_done, socket, 0);
+    rc = zmq_msg_send(&promise_share_done, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
@@ -169,7 +169,7 @@ int payment_init(void *socket) {
     }
 
     memcpy(zmq_msg_data(&payment_init), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&payment_init, socket, 0);
+    rc = zmq_msg_send(&payment_init, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       printf("%s\n", zmq_strerror(errno));
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
@@ -257,7 +257,7 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     }
 
     memcpy(zmq_msg_data(&payment_sign), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&payment_sign, socket, 0);
+    rc = zmq_msg_send(&payment_sign, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
@@ -460,7 +460,7 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     }
 
     memcpy(zmq_msg_data(&payment_end), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&payment_end, socket, 0);
+    rc = zmq_msg_send(&payment_end, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
@@ -601,7 +601,7 @@ int puzzle_solution_send(alice_state_t state, void *socket) {
     }
 
     memcpy(zmq_msg_data(&puzzle_solution_send), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&puzzle_solution_send, socket, 0);
+    rc = zmq_msg_send(&puzzle_solution_send, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
