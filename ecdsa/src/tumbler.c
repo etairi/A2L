@@ -416,23 +416,29 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
   bn_t s_prime, k_2_prime_times_s_prime;
   bn_t q, r_prime_times_e_prime;
-  ec_t R_1_prime_to_the_k_2_s;
-  ec_t pk_to_the_r_e;
+  ec_t R_1_prime_to_the_k_2_times_s;
+  ec_t g_to_the_e_prime;
+  ec_t pk_to_the_r_prime;
+  ec_t pk_to_the_r_times_go_to_the_e;
 
   bn_null(q);
   bn_null(s_prime);
   bn_null(k_2_prime_times_s_prime);
   bn_null(r_prime_times_e_prime);
-  ec_null(R_1_prime_to_the_k_2_s);
-  ec_null(pk_to_the_r_e);
+  ec_null(R_1_prime_to_the_k_2_times_s);
+  ec_null(g_to_the_e_prime);
+  ec_null(pk_to_the_r_prime);
+  ec_null(pk_to_the_r_times_go_to_the_e);
 
   TRY {
     bn_new(q);
     bn_new(s_prime);
     bn_new(k_2_prime_times_s_prime);
     bn_new(r_prime_times_e_prime);
-    ec_new(R_1_prime_to_the_k_2_s);
-    ec_new(pk_to_the_r_e);
+    ec_new(R_1_prime_to_the_k_2_times_s);
+    ec_new(g_to_the_e_prime);
+    ec_new(pk_to_the_r_prime);
+    ec_new(pk_to_the_r_times_go_to_the_e);
 
     // Deserialize the data from the message.
     bn_read_bin(s_prime, data, RLC_BN_SIZE);
@@ -442,22 +448,17 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
     bn_mul(k_2_prime_times_s_prime, state->k_2_prime, s_prime);
     bn_mod(k_2_prime_times_s_prime, k_2_prime_times_s_prime, q);
-    ec_mul(R_1_prime_to_the_k_2_s, state->R_1_prime, k_2_prime_times_s_prime);
-    ec_norm(R_1_prime_to_the_k_2_s, R_1_prime_to_the_k_2_s);
+    ec_mul(R_1_prime_to_the_k_2_times_s, state->R_1_prime, k_2_prime_times_s_prime);
+    ec_norm(R_1_prime_to_the_k_2_times_s, R_1_prime_to_the_k_2_times_s);
 
-    bn_mul(r_prime_times_e_prime, state->r_prime, state->e_prime);
-    bn_mod(r_prime_times_e_prime, r_prime_times_e_prime, q);
-    ec_mul(pk_to_the_r_e, state->ec_pk_tumbler_bob->pk, r_prime_times_e_prime);
-    ec_norm(pk_to_the_r_e, pk_to_the_r_e);
+    ec_mul_gen(g_to_the_e_prime, state->e_prime);
+    ec_mul(pk_to_the_r_prime, state->ec_pk_tumbler_bob->pk, state->r_prime);
+    ec_add(pk_to_the_r_times_go_to_the_e, pk_to_the_r_prime, g_to_the_e_prime);
+    ec_norm(pk_to_the_r_times_go_to_the_e, pk_to_the_r_times_go_to_the_e);
 
-    // printf("left:\n");
-    // ec_print(R_1_prime_to_the_k_2_s);
-    // printf("right:\n");
-    // ec_print(pk_to_the_r_e);
-
-    // if (ec_cmp(R_1_prime_to_the_k_2_s, pk_to_the_r_e) != RLC_OK) {
-    //   THROW(ERR_CAUGHT);
-    // }
+    if (ec_cmp(R_1_prime_to_the_k_2_times_s, pk_to_the_r_times_go_to_the_e) != RLC_EQ) {
+      THROW(ERR_CAUGHT);
+    }
 
     // Build and define the message.
     char *msg_type = "promise_end_done";
@@ -491,8 +492,10 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_free(s_prime);
     bn_free(k_2_prime_times_s_prime);
     bn_free(r_prime_times_e_prime);
-    ec_free(R_1_prime_to_the_k_2_s);
-    ec_free(pk_to_the_r_e);
+    ec_free(R_1_prime_to_the_k_2_times_s);
+    ec_free(g_to_the_e_prime);
+    ec_free(pk_to_the_r_prime);
+    ec_free(pk_to_the_r_times_go_to_the_e);
     if (promise_end_done_msg != NULL) message_free(promise_end_done_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
