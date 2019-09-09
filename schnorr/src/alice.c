@@ -73,7 +73,7 @@ int receive_message(alice_state_t state, void *socket) {
 
   TRY {
     int rc = zmq_msg_init(&message);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not initialize the message.\n");
       THROW(ERR_CAUGHT);
     }

@@ -77,7 +77,7 @@ int receive_message(bob_state_t state, void *socket) {
 
   TRY {
     int rc = zmq_msg_init(&message);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not initialize the message.\n");
       THROW(ERR_CAUGHT);
     }
@@ -796,7 +796,7 @@ int main(void)
     fprintf(stderr, "Error: could not destroy the context.\n");
     exit(1);
   }
-  
+
   clean();
 
   return result_status;
