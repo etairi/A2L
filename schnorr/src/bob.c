@@ -83,7 +83,9 @@ int receive_message(bob_state_t state, void *socket) {
     }
 
     rc = zmq_msg_recv(&message, socket, ZMQ_DONTWAIT);
-    if (rc != -1 && handle_message(state, socket, message) != RLC_OK) THROW(ERR_CAUGHT);
+    if (rc != -1 && handle_message(state, socket, message) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
   } CATCH_ANY {
     result_status = RLC_ERR;
   } FINALLY {
@@ -115,7 +117,7 @@ int promise_init(void *socket) {
     // Send the message.
     zmq_msg_t promise_init;
     int rc = zmq_msg_init_size(&promise_init, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -200,7 +202,7 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     // Send the message.
     zmq_msg_t promise_sign;
     int rc = zmq_msg_init_size(&promise_sign, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -365,7 +367,7 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     // Send the message.
     zmq_msg_t promise_end;
     int rc = zmq_msg_init_size(&promise_end, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -492,7 +494,7 @@ int puzzle_share(bob_state_t state, void *socket) {
     // Send the message.
     zmq_msg_t puzzle_share;
     int rc = zmq_msg_init_size(&puzzle_share, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -644,9 +646,19 @@ int main(void)
 
   printf("Connecting to Tumbler...\n\n");
   void *context = zmq_ctx_new();
+  if (!context) {
+    fprintf(stderr, "Error: could not create a context.\n");
+    exit(1);
+  }
+
   void *socket = zmq_socket(context, ZMQ_REQ);
+  if (!socket) {
+    fprintf(stderr, "Error: could not create a socket.\n");
+    exit(1);
+  }
+
   int rc = zmq_connect(socket, TUMBLER_ENDPOINT);
-  if (rc) {
+  if (rc != 0) {
     fprintf(stderr, "Error: could not connect to Tumbler.\n");
     exit(1);
   }
@@ -676,15 +688,20 @@ int main(void)
     printf("\nPromise procedure time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not close the socket.\n");
       THROW(ERR_CAUGHT);
     }
 
     printf("Connecting to Alice...\n\n");
     socket = zmq_socket(context, ZMQ_REQ);
+    if (!socket) {
+      fprintf(stderr, "Error: could not create a socket.\n");
+      exit(1);
+    }
+
     rc = zmq_connect(socket, ALICE_ENDPOINT);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not connect to Alice.\n");
       THROW(ERR_CAUGHT);
     }
@@ -700,14 +717,19 @@ int main(void)
     }
 
     rc = zmq_close(socket);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not close the socket.\n");
       THROW(ERR_CAUGHT);
     }
 
     socket = zmq_socket(context, ZMQ_REP);
+    if (!socket) {
+      fprintf(stderr, "Error: could not create a socket.\n");
+      exit(1);
+    }
+
     rc = zmq_bind(socket, BOB_ENDPOINT);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not bind the socket.\n");
       THROW(ERR_CAUGHT);
     }
@@ -727,12 +749,16 @@ int main(void)
   }
   
   rc = zmq_close(socket);
-  if (rc) {
+  if (rc != 0) {
     fprintf(stderr, "Error: could not close the socket.\n");
-    THROW(ERR_CAUGHT);
+    exit(1);
   }
-  zmq_ctx_destroy(context);
-  clean();
+
+  rc = zmq_ctx_destroy(context);
+  if (rc != 0) {
+    fprintf(stderr, "Error: could not destroy the context.\n");
+    exit(1);
+  }
 
   return result_status;
 }

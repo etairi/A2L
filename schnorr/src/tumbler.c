@@ -83,7 +83,9 @@ int receive_message(tumbler_state_t state, void *socket) {
     }
 
     rc = zmq_msg_recv(&message, socket, ZMQ_DONTWAIT);
-    if (rc != -1 && handle_message(state, socket, message) != RLC_OK) THROW(ERR_CAUGHT);
+    if (rc != -1 && handle_message(state, socket, message) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
   } CATCH_ANY {
     result_status = RLC_ERR;
   } FINALLY {
@@ -171,7 +173,7 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Send the message.
     zmq_msg_t promise_init;
     int rc = zmq_msg_init_size(&promise_init, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -291,7 +293,7 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Send the message.
     zmq_msg_t promise_sign;
     int rc = zmq_msg_init_size(&promise_sign, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -380,7 +382,7 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Send the message.
     zmq_msg_t promise_end_done;
     int rc = zmq_msg_init_size(&promise_end_done, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -462,7 +464,7 @@ int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Send the message.
     zmq_msg_t payment_init;
     int rc = zmq_msg_init_size(&payment_init, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -603,7 +605,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Send the message.
     zmq_msg_t payment_sign_done;
     int rc = zmq_msg_init_size(&payment_sign_done, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -728,7 +730,7 @@ int payment_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Send the message.
     zmq_msg_t puzzle_solve;
     int rc = zmq_msg_init_size(&puzzle_solve, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -760,15 +762,24 @@ int main(void)
   init();
   int result_status = RLC_OK;
 
-
   tumbler_state_t state;
   tumbler_state_null(state);
 
   // Bind the socket to talk to clients.
   void *context = zmq_ctx_new();
+  if (!context) {
+    fprintf(stderr, "Error: could not create a context.\n");
+    exit(1);
+  }
+  
   void *socket = zmq_socket(context, ZMQ_REP);
+  if (!socket) {
+    fprintf(stderr, "Error: could not create a socket.\n");
+    exit(1);
+  }
+
   int rc = zmq_bind(socket, TUMBLER_ENDPOINT);
-  if (rc) {
+  if (rc != 0) {
     fprintf(stderr, "Error: could not bind the socket.\n");
     exit(1);
   }
@@ -796,11 +807,17 @@ int main(void)
   }
 
   rc = zmq_close(socket);
-  if (rc) {
+  if (rc != 0) {
     fprintf(stderr, "Error: could not close the socket.\n");
-    THROW(ERR_CAUGHT);
+    exit(1);
   }
-  zmq_ctx_destroy(context);
+
+  rc = zmq_ctx_destroy(context);
+  if (rc != 0) {
+    fprintf(stderr, "Error: could not destroy the context.\n");
+    exit(1);
+  }
+
   clean();
 
   return result_status;

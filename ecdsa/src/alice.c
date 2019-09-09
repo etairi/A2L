@@ -79,7 +79,9 @@ int receive_message(alice_state_t state, void *socket) {
     }
 
     rc = zmq_msg_recv(&message, socket, ZMQ_DONTWAIT);
-    if (rc != -1 && handle_message(state, socket, message) != RLC_OK) THROW(ERR_CAUGHT);
+    if (rc != -1 && handle_message(state, socket, message) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
   } CATCH_ANY {
     result_status = RLC_ERR;
   } FINALLY {
@@ -118,7 +120,7 @@ int puzzle_share_handler(alice_state_t state, void *socket, uint8_t *data) {
     // Send the message.
     zmq_msg_t promise_share_done;
     int rc = zmq_msg_init_size(&promise_share_done, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -163,7 +165,7 @@ int payment_init(void *socket) {
     // Send the message.
     zmq_msg_t payment_init;
     int rc = zmq_msg_init_size(&payment_init, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -251,7 +253,7 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     // Send the message.
     zmq_msg_t payment_sign;
     int rc = zmq_msg_init_size(&payment_sign, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -454,7 +456,7 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     // Send the message.
     zmq_msg_t payment_end;
     int rc = zmq_msg_init_size(&payment_end, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -595,7 +597,7 @@ int puzzle_solution_send(alice_state_t state, void *socket) {
     // Send the message.
     zmq_msg_t puzzle_solution_send;
     int rc = zmq_msg_init_size(&puzzle_solution_send, total_msg_length);
-    if (rc) {
+    if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       THROW(ERR_CAUGHT);
     }
@@ -630,9 +632,19 @@ int main(void)
 
   // Socket to talk to other parties.
   void *context = zmq_ctx_new();
+  if (!context) {
+    fprintf(stderr, "Error: could not create a context.\n");
+    exit(1);
+  }
+
   void *socket = zmq_socket(context, ZMQ_REP);
+  if (!socket) {
+    fprintf(stderr, "Error: could not create a socket.\n");
+    exit(1);
+  }
+
   int rc = zmq_bind(socket, ALICE_ENDPOINT);
-  if (rc) {
+  if (rc != 0) {
     fprintf(stderr, "Error: could not bind the socket.\n");
     exit(1);
   }
@@ -654,15 +666,20 @@ int main(void)
     }
 
     rc = zmq_close(socket);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not close the socket.\n");
       THROW(ERR_CAUGHT);
     }
 
     printf("Connecting to Tumbler...\n\n");
     socket = zmq_socket(context, ZMQ_REQ);
+    if (!socket) {
+      fprintf(stderr, "Error: could not create a socket.\n");
+      exit(1);
+    }
+
     rc = zmq_connect(socket, TUMBLER_ENDPOINT);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not connect to Tumbler.\n");
       THROW(ERR_CAUGHT);
     }
@@ -682,15 +699,20 @@ int main(void)
     printf("\nPayment procedure time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not close the socket.\n");
       THROW(ERR_CAUGHT);
     }
 
     printf("Connecting to Bob...\n\n");
     socket = zmq_socket(context, ZMQ_REQ);
+    if (!socket) {
+      fprintf(stderr, "Error: could not create a socket.\n");
+      exit(1);
+    }
+
     rc = zmq_connect(socket, BOB_ENDPOINT);
-    if (rc) {
+    if (rc != 0) {
       fprintf(stderr, "Error: could not connect to Bob.\n");
       THROW(ERR_CAUGHT);
     }
@@ -705,11 +727,17 @@ int main(void)
   }
 
   rc = zmq_close(socket);
-  if (rc) {
+  if (rc != 0) {
     fprintf(stderr, "Error: could not close the socket.\n");
-    THROW(ERR_CAUGHT);
+    exit(1);
   }
-  zmq_ctx_destroy(context);
+
+  rc = zmq_ctx_destroy(context);
+  if (rc != 0) {
+    fprintf(stderr, "Error: could not destroy the context.\n");
+    exit(1);
+  }
+
   clean();
 
   return result_status;
