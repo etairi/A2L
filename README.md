@@ -1,13 +1,13 @@
-#  Anonymous Atomic Locks (A${^2}$L)
+#  Anonymous Atomic Locks (A2L)
 
-A${^2}$L [1] is a secure, privacy-preserving, interoperable, and fungibility-preserving PCH. A${^2}$L builds on a novel cryptographic primitive 
+A2L [1] is a secure, privacy-preserving, interoperable, and fungibility-preserving PCH. A2L builds on a novel cryptographic primitive 
 that realizes a three-party protocol for conditional transactions, where the intermediary pays the receiver only if the latter solves a cryptographic 
-challenge with the help of the sender. A${^2}$L can be instantiated using either Schnorr or ECDSA signature.
+challenge with the help of the sender. A2L can be instantiated using either Schnorr or ECDSA signature.
 
 ## Dependencies
 
 * [CMake](https://cmake.org/download/) >= 3.12
-* [RELIC](https://github.com/relic-toolkit/relic) (configured with -DBN_PRECI=4096 and -DARITH=gmp)
+* [RELIC](https://github.com/relic-toolkit/relic) (configured with `-DBN_PRECI=4096` and `-DARITH=gmp`)
 
 ## Warning
 
@@ -18,4 +18,4 @@ It was developed for experimentation purposes.
 
 ## References
 
-[1]  Erkan Tairi, Pedro-Moreno Sanchez, and Matteo Maffei, "[A${^2}$L: Anonymous Atomic Locks for Scalability and Interoperability in Payment Channel Hubs](https://eprint.iacr.org/2019/589)".
+[1]  Erkan Tairi, Pedro-Moreno Sanchez, and Matteo Maffei, "[A2L: Anonymous Atomic Locks for Scalability and Interoperability in Payment Channel Hubs](https://eprint.iacr.org/2019/589)".
