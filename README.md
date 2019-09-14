@@ -7,6 +7,7 @@ challenge with the help of the sender. A2L can be instantiated using either Schn
 ## Dependencies
 
 * [CMake](https://cmake.org/download/) >= 3.12
+* [GMP](https://gmplib.org/) >= 6.1.2
 * [RELIC](https://github.com/relic-toolkit/relic) (configured with `-DBN_PRECI=4096` and `-DARITH=gmp`)
 
 ## Warning
