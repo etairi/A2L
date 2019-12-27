@@ -40,10 +40,10 @@ static symstruct_t msg_lookuptable[] = {
 
 typedef struct {
   keys_t keys;
-  paillier_public_key_t tumbler_paillier_pk;
+  cl_public_key_t tumbler_cl_pk;
   commit_t com;
-  ec_t g_to_the_alpha_plus_beta;
-  bn_t ctx_alpha_plus_beta;
+  ec_t g_to_the_alpha_times_beta;
+  cl_ciphertext_t ctx_alpha_times_beta;
   bn_t k_1;
   ec_t R_1;
   bn_t s_hat;
@@ -64,10 +64,10 @@ typedef alice_state_st *alice_state_t;
       THROW(ERR_NO_MEMORY);                                 \
     }                                                       \
     keys_new((state)->keys);                                \
-    paillier_public_key_new((state)->tumbler_paillier_pk);  \
+    cl_public_key_new((state)->tumbler_cl_pk);              \
     commit_new((state)->com);                               \
-    ec_new((state)->g_to_the_alpha_plus_beta);              \
-    bn_new((state)->ctx_alpha_plus_beta);                   \
+    ec_new((state)->g_to_the_alpha_times_beta);             \
+    cl_ciphertext_new((state)->ctx_alpha_times_beta);       \
     bn_new((state)->k_1);                                   \
     ec_new((state)->R_1);                                   \
     bn_new((state)->s_hat);                                 \
@@ -80,10 +80,10 @@ typedef alice_state_st *alice_state_t;
 #define alice_state_free(state)                             \
   do {                                                      \
     keys_free((state)->keys);                               \
-    paillier_public_key_free((state)->tumbler_paillier_pk); \
+    cl_public_key_free((state)->tumbler_cl_pk);             \
     commit_free((state)->com);                              \
-    ec_free((state)->g_to_the_alpha_plus_beta);             \
-    bn_free((state)->ctx_alpha_plus_beta);                  \
+    ec_free((state)->g_to_the_alpha_times_beta);            \
+    cl_ciphertext_free((state)->ctx_alpha_times_beta);      \
     bn_free((state)->k_1);                                  \
     ec_free((state)->R_1);                                  \
     bn_free((state)->s_hat);                                \

@@ -6,6 +6,10 @@
 #include "types.h"
 
 #define RLC_EC_SIZE_COMPRESSED 33
+#define RLC_CL_SECRET_KEY_SIZE 290
+#define RLC_CL_PUBLIC_KEY_SIZE 1070
+#define RLC_CL_CIPHERTEXT_SIZE 1550
+
 #define RLC_PAILLIER_CTX_SIZE (RLC_BN_BITS / 8 + 1)
 #define RLC_PAILLIER_KEY_SIZE 256
 
@@ -21,7 +25,7 @@ int clean();
 
 void memzero(void *ptr, size_t len);
 long long cpucycles(void);
-long long timer(void);
+long long ttimer(void);
 
 void serialize_message(uint8_t **serialized,
 											 const message_t message,
@@ -29,25 +33,35 @@ void serialize_message(uint8_t **serialized,
 											 const unsigned msg_data_length);
 void deserialize_message(message_t *deserialized_message, const uint8_t *serialized);
 
-int generate_keys_and_write_to_file();
+int generate_keys_and_write_to_file(const cl_params_t params);
 int read_keys_from_file_alice_bob(const char *name,
 																	ec_secret_key_t ec_secret_key,
 																	ec_public_key_t ec_public_key,
-																	paillier_secret_key_t paillier_secret_key,
-																	paillier_public_key_t paillier_public_key,
-																	paillier_public_key_t tumbler_paillier_public_key);
+																	cl_secret_key_t cl_secret_key,
+																	cl_public_key_t cl_public_key,
+																	cl_public_key_t tumbler_cl_public_key);
 int read_keys_from_file_tumbler(ec_secret_key_t ec_secret_key,
 																ec_public_key_t ec_public_key_alice_tumbler,
 																ec_public_key_t ec_public_key_bob_tumbler,
-																paillier_secret_key_t paillier_secret_key,
-																paillier_public_key_t paillier_public_key_tumbler,
-																paillier_public_key_t paillier_public_key_alice,
-																paillier_public_key_t paillier_public_key_bob);
+																cl_secret_key_t cl_secret_key,
+																cl_public_key_t cl_public_key_tumbler,
+																cl_public_key_t cl_public_key_alice,
+																cl_public_key_t cl_public_key_bob);
 
 void print_ec_secret_key(const char* name, const ec_secret_key_t secret_key);
 void print_ec_public_key(const char* name, const ec_public_key_t public_key);
 void print_paillier_secret_key(const char* name, const paillier_secret_key_t secret_key);
 void print_paillier_public_key(const char* name, const paillier_public_key_t public_key);
+
+int generate_cl_params(cl_params_t params);
+int cl_enc(cl_ciphertext_t ciphertext,
+					 const GEN plaintext,
+					 const cl_public_key_t public_key,
+					 const cl_params_t params);
+int cl_dec(GEN *plaintext,
+					 const cl_ciphertext_t ciphertext,
+					 const cl_secret_key_t secret_key,
+					 const cl_params_t params);
 
 int commit(commit_t com, const ec_t x);
 int decommit(const commit_t com, const ec_t x);

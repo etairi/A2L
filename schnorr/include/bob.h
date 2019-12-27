@@ -38,10 +38,10 @@ static symstruct_t msg_lookuptable[] = {
 
 typedef struct {
   keys_t keys;
-  paillier_public_key_t tumbler_paillier_pk;
+  cl_public_key_t tumbler_cl_pk;
   commit_t com;
   ec_t g_to_the_alpha;
-  bn_t ctx_alpha;
+  cl_ciphertext_t ctx_alpha;
   bn_t k_1_prime;
   ec_t R_1_prime;
   bn_t s_prime;
@@ -60,10 +60,10 @@ typedef bob_state_st *bob_state_t;
       THROW(ERR_NO_MEMORY);                                 \
     }                                                       \
     keys_new((state)->keys);                                \
-    paillier_public_key_new((state)->tumbler_paillier_pk);  \
+    cl_public_key_new((state)->tumbler_cl_pk);              \
     commit_new((state)->com);                               \
     ec_new((state)->g_to_the_alpha);                        \
-    bn_new((state)->ctx_alpha);                             \
+    cl_ciphertext_new((state)->ctx_alpha);                  \
     bn_new((state)->k_1_prime);                             \
     ec_new((state)->R_1_prime);                             \
     bn_new((state)->s_prime);                               \
@@ -74,10 +74,10 @@ typedef bob_state_st *bob_state_t;
 #define bob_state_free(state)                               \
   do {                                                      \
     keys_free((state)->keys);                               \
-    paillier_public_key_free((state)->tumbler_paillier_pk); \
+    cl_public_key_free((state)->tumbler_cl_pk);             \
     commit_free((state)->com);                              \
     ec_free((state)->g_to_the_alpha);                       \
-    bn_free((state)->ctx_alpha);                            \
+    cl_ciphertext_free((state)->ctx_alpha);                 \
     bn_free((state)->k_1_prime);                            \
     ec_free((state)->R_1_prime);                            \
     bn_free((state)->s_prime);                              \

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <time.h>
 #include "relic/relic.h"
+#include "pari/pari.h"
 #include "types.h"
 #include "util.h"
 
@@ -20,6 +21,9 @@ int init() {
 
 	// Set the secp256k1 curve, which is used in Bitcoin.
 	ep_param_set(SECG_K256);
+
+	// Initialize the PARI stack (in bytes).
+	pari_init(10000000, 2);
 	
 	return RLC_OK;
 }
@@ -41,7 +45,7 @@ long long cpucycles(void) {
 	return cycles;
 }
 
-long long timer(void) {
+long long ttimer(void) {
 	struct timespec time;
 	clock_gettime(CLOCK_REALTIME, &time);
 	return (long long) (time.tv_sec * CLOCK_PRECISION + time.tv_nsec);
@@ -82,27 +86,20 @@ void deserialize_message(message_t *deserialized_message, const uint8_t *seriali
 	}
 }
 
-int generate_keys_and_write_to_file() {
+int generate_keys_and_write_to_file(const cl_params_t params) {
 	int result_status = RLC_OK;
 
-	bn_t paillier_sk_alice, paillier_pk_alice;
-	bn_t paillier_sk_bob, paillier_pk_bob;
-	bn_t paillier_sk_tumbler, paillier_pk_tumbler;
+	GEN cl_sk_alice, cl_pk_alice;
+	GEN cl_sk_bob, cl_pk_bob;
+	GEN cl_sk_tumbler, cl_pk_tumbler;
+
 	bn_t q, ec_sk_alice, ec_sk_bob, ec_sk_tumbler;
 	ec_t ec_pk_alice, ec_pk_bob, ec_pk_tumbler;
 	ec_t ec_pk_alice_tumbler, ec_pk_bob_tumbler;
 
 	uint8_t serialized_ec_sk[RLC_BN_SIZE];
 	uint8_t serialized_ec_pk[RLC_EC_SIZE_COMPRESSED];
-	uint8_t serialized_paillier_sk[RLC_PAILLIER_KEY_SIZE];
-	uint8_t serialized_paillier_pk[RLC_PAILLIER_KEY_SIZE];
 
-	bn_null(paillier_sk_alice);
-	bn_null(paillier_pk_alice);
-	bn_null(paillier_sk_bob);
-	bn_null(paillier_pk_bob);
-	bn_null(paillier_sk_tumbler);
-	bn_null(paillier_pk_tumbler);
 	bn_null(q);
 	bn_null(ec_sk_alice);
 	bn_null(ec_sk_bob);
@@ -115,12 +112,6 @@ int generate_keys_and_write_to_file() {
 	ec_null(ec_pk_bob_tumbler);
 
 	TRY {
-		bn_new(paillier_sk_alice);
-		bn_new(paillier_pk_alice);
-		bn_new(paillier_sk_bob);
-		bn_new(paillier_pk_bob);
-		bn_new(paillier_sk_tumbler);
-		bn_new(paillier_pk_tumbler);
 		bn_new(q);
 		bn_new(ec_sk_alice);
 		bn_new(ec_sk_bob);
@@ -147,17 +138,15 @@ int generate_keys_and_write_to_file() {
 		ec_add(ec_pk_bob_tumbler, ec_pk_bob, ec_pk_tumbler);
 		ec_norm(ec_pk_bob_tumbler, ec_pk_bob_tumbler);
 
-		// Compute Paillier public and secret keys.
-		// Assumes that RLC_BN_BITS is set to 4096.
-		if (cp_phpe_gen(paillier_pk_alice, paillier_sk_alice, RLC_BN_BITS / 2) != RLC_OK) {
-			THROW(ERR_CAUGHT);
-		}
-		if (cp_phpe_gen(paillier_pk_bob, paillier_sk_bob, RLC_BN_BITS / 2) != RLC_OK) {
-			THROW(ERR_CAUGHT);
-		}
-		if (cp_phpe_gen(paillier_pk_tumbler, paillier_sk_tumbler, RLC_BN_BITS / 2) != RLC_OK) {
-			THROW(ERR_CAUGHT);
-		}
+		// Compute CL encryption public and secret keys.
+		cl_sk_alice = randomi(params->bound);
+		cl_pk_alice = nupow(params->g_q, cl_sk_alice, NULL);
+
+		cl_sk_bob = randomi(params->bound);
+		cl_pk_bob = nupow(params->g_q, cl_sk_bob, NULL);
+
+		cl_sk_tumbler = randomi(params->bound);
+		cl_pk_tumbler = nupow(params->g_q, cl_sk_tumbler, NULL);
 
 		// Create the filenames for the keys.
 		unsigned alice_key_file_length = strlen(ALICE_KEY_FILE_PREFIX) + strlen(KEY_FILE_EXTENSION) + 10;
@@ -187,14 +176,12 @@ int generate_keys_and_write_to_file() {
 		fwrite(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file);
 		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_alice_tumbler, 1);
 		fwrite(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file);
-		bn_write_bin(serialized_paillier_sk, RLC_PAILLIER_KEY_SIZE, paillier_sk_alice);
-		fwrite(serialized_paillier_sk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file);
-		bn_write_bin(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE, paillier_pk_alice);
-		fwrite(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file);
+
+		fwrite(GENtostr(cl_sk_alice), sizeof(char), RLC_CL_SECRET_KEY_SIZE, file);
+    fwrite(GENtostr(cl_pk_alice), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
+
 		memzero(serialized_ec_sk, RLC_BN_SIZE);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
-		memzero(serialized_paillier_sk, RLC_PAILLIER_KEY_SIZE);
-		memzero(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
 
 		fclose(file);
 
@@ -208,14 +195,12 @@ int generate_keys_and_write_to_file() {
 		fwrite(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file);
 		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_bob_tumbler, 1);
 		fwrite(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file);
-		bn_write_bin(serialized_paillier_sk, RLC_PAILLIER_KEY_SIZE, paillier_sk_bob);
-		fwrite(serialized_paillier_sk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file);
-		bn_write_bin(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE, paillier_pk_bob);
-		fwrite(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file);
+
+		fwrite(GENtostr(cl_sk_bob), sizeof(char), RLC_CL_SECRET_KEY_SIZE, file);
+    fwrite(GENtostr(cl_pk_bob), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
+
 		memzero(serialized_ec_sk, RLC_BN_SIZE);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
-		memzero(serialized_paillier_sk, RLC_PAILLIER_KEY_SIZE);
-		memzero(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
 
 		fclose(file);
 
@@ -225,7 +210,7 @@ int generate_keys_and_write_to_file() {
 			THROW(ERR_NO_FILE);
 		}
 
-		// NOTE: Tumbler has two EC public keys, one with Alice and one with Bob.
+		// Tumbler has two EC public keys, one with Alice and one with Bob.
 		bn_write_bin(serialized_ec_sk, RLC_BN_SIZE, ec_sk_tumbler);
 		fwrite(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file);
 		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_alice_tumbler, 1);
@@ -233,16 +218,11 @@ int generate_keys_and_write_to_file() {
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_bob_tumbler, 1);
 		fwrite(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file);
-		bn_write_bin(serialized_paillier_sk, RLC_PAILLIER_KEY_SIZE, paillier_sk_tumbler);
-		fwrite(serialized_paillier_sk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file);
-		bn_write_bin(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE, paillier_pk_tumbler);
-		fwrite(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file);
-		memzero(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
-		bn_write_bin(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE, paillier_pk_alice);
-		fwrite(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file);
-		memzero(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
-		bn_write_bin(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE, paillier_pk_bob);
-		fwrite(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file);
+
+		fwrite(GENtostr(cl_sk_tumbler), sizeof(char), RLC_CL_SECRET_KEY_SIZE, file);
+    fwrite(GENtostr(cl_pk_tumbler), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
+		fwrite(GENtostr(cl_pk_alice), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
+		fwrite(GENtostr(cl_pk_bob), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
 
 		fclose(file);
 
@@ -252,12 +232,6 @@ int generate_keys_and_write_to_file() {
 	} CATCH_ANY {
 		result_status = RLC_ERR;
 	} FINALLY {
-		bn_free(paillier_sk_alice);
-		bn_free(paillier_pk_alice);
-		bn_free(paillier_sk_bob);
-		bn_free(paillier_pk_bob);
-		bn_free(paillier_sk_tumbler);
-		bn_free(paillier_pk_tumbler);
 		bn_free(q);
 		bn_free(ec_sk_alice);
 		bn_free(ec_sk_bob);
@@ -276,15 +250,15 @@ int generate_keys_and_write_to_file() {
 int read_keys_from_file_alice_bob(const char *name,
 																	ec_secret_key_t ec_secret_key,
 																	ec_public_key_t ec_public_key,
-																	paillier_secret_key_t paillier_secret_key,
-																	paillier_public_key_t paillier_public_key,
-																	paillier_public_key_t tumbler_paillier_public_key) {
+																	cl_secret_key_t cl_secret_key,
+																	cl_public_key_t cl_public_key,
+																	cl_public_key_t tumbler_cl_public_key) {
 	int result_status = RLC_OK;
 
 	uint8_t serialized_ec_sk[RLC_BN_SIZE];
 	uint8_t serialized_ec_pk[RLC_EC_SIZE_COMPRESSED];
-	uint8_t serialized_paillier_sk[RLC_PAILLIER_KEY_SIZE];
-	uint8_t serialized_paillier_pk[RLC_PAILLIER_KEY_SIZE];
+	char serialized_cl_sk[RLC_CL_SECRET_KEY_SIZE];
+	char serialized_cl_pk[RLC_CL_PUBLIC_KEY_SIZE];
 
 	TRY {
 		unsigned key_file_length = strlen(name) + strlen(KEY_FILE_EXTENSION) + 10;
@@ -311,16 +285,17 @@ int read_keys_from_file_alice_bob(const char *name,
 		}
 		ec_read_bin(ec_public_key->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
-		if (fread(serialized_paillier_sk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file) != RLC_PAILLIER_KEY_SIZE) {
+
+		if (fread(serialized_cl_sk, sizeof(char), RLC_CL_SECRET_KEY_SIZE, file) != RLC_CL_SECRET_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		bn_read_bin(paillier_secret_key->sk, serialized_paillier_sk, RLC_PAILLIER_KEY_SIZE);
+		cl_secret_key->sk = gp_read_str(serialized_cl_sk);
 		
-		if (fread(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file) != RLC_PAILLIER_KEY_SIZE) {
+		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		bn_read_bin(paillier_public_key->pk, serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
-		memzero(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
+		cl_public_key->pk = gp_read_str(serialized_cl_pk);
+		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
 
 		fclose(file);
 		free(key_file_name);
@@ -339,11 +314,11 @@ int read_keys_from_file_alice_bob(const char *name,
 			THROW(ERR_NO_FILE);
 		}
 
-		fseek(file, RLC_BN_SIZE + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_PAILLIER_KEY_SIZE, SEEK_SET);
-		if (fread(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file) != RLC_PAILLIER_KEY_SIZE) {
+		fseek(file, RLC_BN_SIZE + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_CL_SECRET_KEY_SIZE, SEEK_SET);
+		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		bn_read_bin(tumbler_paillier_public_key->pk, serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
+		tumbler_cl_public_key->pk = gp_read_str(serialized_cl_pk);
 
 		fclose(file);
 		free(key_file_name);
@@ -357,16 +332,16 @@ int read_keys_from_file_alice_bob(const char *name,
 int read_keys_from_file_tumbler(ec_secret_key_t ec_secret_key,
 																ec_public_key_t ec_public_key_alice_tumbler,
 																ec_public_key_t ec_public_key_bob_tumbler,
-																paillier_secret_key_t paillier_secret_key,
-																paillier_public_key_t paillier_public_key_tumbler,
-																paillier_public_key_t paillier_public_key_alice,
-																paillier_public_key_t paillier_public_key_bob) {
+																cl_secret_key_t cl_secret_key,
+																cl_public_key_t cl_public_key,
+																cl_public_key_t cl_public_key_alice,
+																cl_public_key_t cl_public_key_bob) {
 	int result_status = RLC_OK;
 
 	uint8_t serialized_ec_sk[RLC_BN_SIZE];
 	uint8_t serialized_ec_pk[RLC_EC_SIZE_COMPRESSED];
-	uint8_t serialized_paillier_sk[RLC_PAILLIER_KEY_SIZE];
-	uint8_t serialized_paillier_pk[RLC_PAILLIER_KEY_SIZE];
+	char serialized_cl_sk[RLC_CL_SECRET_KEY_SIZE];
+	char serialized_cl_pk[RLC_CL_PUBLIC_KEY_SIZE];
 
 	TRY {
 		unsigned key_file_length = strlen(TUMBLER_KEY_FILE_PREFIX) + strlen(KEY_FILE_EXTENSION) + 10;
@@ -399,27 +374,27 @@ int read_keys_from_file_tumbler(ec_secret_key_t ec_secret_key,
 		}
 		ec_read_bin(ec_public_key_bob_tumbler->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
-		if (fread(serialized_paillier_sk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file) != RLC_PAILLIER_KEY_SIZE) {
+		if (fread(serialized_cl_sk, sizeof(char), RLC_CL_SECRET_KEY_SIZE, file) != RLC_CL_SECRET_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		bn_read_bin(paillier_secret_key->sk, serialized_paillier_sk, RLC_PAILLIER_KEY_SIZE);
+		cl_secret_key->sk = gp_read_str(serialized_cl_sk);
 		
-		if (fread(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file) != RLC_PAILLIER_KEY_SIZE) {
+		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		bn_read_bin(paillier_public_key_tumbler->pk, serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
-		memzero(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
+		cl_public_key->pk = gp_read_str(serialized_cl_pk);
+		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
 
-		if (fread(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file) != RLC_PAILLIER_KEY_SIZE) {
+		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		bn_read_bin(paillier_public_key_alice->pk, serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
-		memzero(serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
+		cl_public_key_alice->pk = gp_read_str(serialized_cl_pk);
+		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
 
-		if (fread(serialized_paillier_pk, sizeof(uint8_t), RLC_PAILLIER_KEY_SIZE, file) != RLC_PAILLIER_KEY_SIZE) {
+		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		bn_read_bin(paillier_public_key_bob->pk, serialized_paillier_pk, RLC_PAILLIER_KEY_SIZE);
+		cl_public_key_bob->pk = gp_read_str(serialized_cl_pk);
 
 		fclose(file);
 		free(key_file_name);
@@ -452,6 +427,88 @@ void print_paillier_public_key(const char* name, const paillier_public_key_t pub
 	printf("\n%s's Paillier public key\n", name);
 	printf("pk:\n");
 	bn_print(public_key->pk);
+}
+
+int generate_cl_params(cl_params_t params) {
+	int result_status = RLC_OK;
+
+	bn_t q;
+	bn_null(q);
+
+	TRY {
+		bn_new(q);
+		ec_curve_get_ord(q);
+
+		if (params == NULL) {
+			THROW(ERR_CAUGHT);
+		}
+
+		const unsigned q_str_len = bn_size_str(q, 10);
+		char q_str[q_str_len];
+		bn_write_str(q_str, q_str_len, q, 10);
+
+		// Parameters generated using HSM.sage script.
+		params->Delta_K = negi(strtoi("7917297328878683784842235952488620683924100338715963369693275768732162831834859052302716918416013031853265985178593375655994934704463023676296364363803257769443921988228513012040548137047446483986199954435962221122006965317176921759968659376932101987729556148116190707955808747136944623277094531007901655971804163515065712136708172984834192213773138039179492400722665370317221867505959207212674207052581946756527848674480328854830559945140752059719739492686061412113598389028096554833252668553020964851121112531561161799093718416247246137641387797659"));
+		// Bound for exponentiation, for uniform sampling to be at 2^{-40} from the unifom in <g_q>.
+    params->bound = strtoi("25413151665722220203610173826311975594790577398151861612310606875883990655261658217495681782816066858410439979225400605895077952191850577877370585295070770312182177789916520342292660169492395314400288273917787194656036294620169343699612953311314935485124063580486497538161801803224580096");
+
+    GEN g_q_a = strtoi("4008431686288539256019978212352910132512184203702279780629385896624473051840259706993970111658701503889384191610389161437594619493081376284617693948914940268917628321033421857293703008209538182518138447355678944124861126384966287069011522892641935034510731734298233539616955610665280660839844718152071538201031396242932605390717004106131705164194877377");
+    GEN g_q_b = negi(strtoi("3117991088204303366418764671444893060060110057237597977724832444027781815030207752301780903747954421114626007829980376204206959818582486516608623149988315386149565855935873517607629155593328578131723080853521348613293428202727746191856239174267496577422490575311784334114151776741040697808029563449966072264511544769861326483835581088191752567148165409"));
+    GEN g_q_c = strtoi("7226982982667784284607340011220616424554394853592495056851825214613723615410492468400146084481943091452495677425649405002137153382700126963171182913281089395393193450415031434185562111748472716618186256410737780813669746598943110785615647848722934493732187571819575328802273312361412673162473673367423560300753412593868713829574117975260110889575205719");
+
+		// Order of the secp256k1 elliptic curve group and the group G^q.
+		params->q = strtoi(q_str); // 115792089237316195423570985008687907852837564279074904382605163141518161494337
+		params->g_q = qfi(g_q_a, g_q_b, g_q_c);
+	} CATCH_ANY {
+		result_status = RLC_ERR;
+	} FINALLY {
+		bn_free(q);
+	}
+
+	return result_status;
+}
+
+int cl_enc(cl_ciphertext_t ciphertext,
+					 const GEN plaintext,
+					 const cl_public_key_t public_key,
+					 const cl_params_t params) {
+  int result_status = RLC_OK;
+
+  TRY {
+    GEN r = randomi(params->bound);
+    ciphertext->c1 = nupow(params->g_q, r, NULL);
+
+    GEN L = Fp_inv(plaintext, params->q);
+    if (!mpodd(L)) {
+      L = subii(L, params->q);
+    }
+
+		// f^plaintext = (q^2, Lq, (L - Delta_k) / 4)
+    GEN fm = qfi(sqri(params->q), mulii(L, params->q), shifti(subii(sqri(L), params->Delta_K), -2));
+    ciphertext->c2 = gmul(nupow(public_key->pk, r, NULL), fm);
+  } CATCH_ANY {
+    result_status = RLC_ERR;
+  }
+
+  return result_status;
+}
+
+int cl_dec(GEN *plaintext,
+					 const cl_ciphertext_t ciphertext,
+					 const cl_secret_key_t secret_key,
+					 const cl_params_t params) {
+  int result_status = RLC_OK;
+
+  TRY {
+		// c2 * (c1^sk)^(-1)
+    GEN fm = gmul(ciphertext->c2, ginv(nupow(ciphertext->c1, secret_key->sk, NULL)));
+    GEN L = diviiexact(gel(fm, 2), params->q);
+    *plaintext = Fp_inv(L, params->q);
+  } CATCH_ANY {
+    result_status = RLC_ERR;
+  }
+
+  return result_status;
 }
 
 int commit(commit_t com, const ec_t x) {

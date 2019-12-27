@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "relic/relic.h"
+#include "pari/pari.h"
 #include "zmq.h"
 #include "tumbler.h"
 #include "types.h"
@@ -104,10 +105,6 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
   message_t promise_init_msg;
   uint8_t *serialized_message = NULL;
-  uint8_t in[RLC_PAILLIER_CTX_SIZE];
-  uint8_t out[RLC_PAILLIER_CTX_SIZE];
-  int in_len = bn_size_bin(state->keys->paillier_pk->pk);
-  int out_len = RLC_PAILLIER_CTX_SIZE;
 
   bn_t q;
   ec_t x;
@@ -141,11 +138,14 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
       THROW(ERR_CAUGHT);
     }
 
-    bn_write_bin(in, in_len, state->alpha);
-		if (cp_phpe_enc(out, &out_len, in, in_len, state->keys->paillier_pk->pk) != RLC_OK) {
+    const unsigned alpha_str_len = bn_size_str(state->alpha, 10);
+    char alpha_str[alpha_str_len];
+    bn_write_str(alpha_str, alpha_str_len, state->alpha, 10);
+
+    GEN plain_alpha = strtoi(alpha_str);
+    if (cl_enc(state->ctx_alpha, plain_alpha, state->keys->cl_pk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
-    bn_read_bin(state->ctx_alpha, out, out_len);
 
     ec_add(x, state->R_2_prime, state->pi_2_prime->a);
     if (commit(com, x) != RLC_OK) {
@@ -155,7 +155,7 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Build and define the message.
     char *msg_type = "promise_init_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_PAILLIER_CTX_SIZE;
+    const unsigned msg_data_length = (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE);
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(promise_init_msg, msg_type_length, msg_data_length);
 
@@ -165,7 +165,10 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_write_bin(promise_init_msg->data + RLC_EC_SIZE_COMPRESSED + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED, com->r, 1);
     ec_write_bin(promise_init_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED, pi_alpha->a, 1);
     bn_write_bin(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE, pi_alpha->z);
-    bn_write_bin(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_PAILLIER_CTX_SIZE, state->ctx_alpha);
+    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE),
+           GENtostr(state->ctx_alpha->c1), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE,
+           GENtostr(state->ctx_alpha->c2), RLC_CL_CIPHERTEXT_SIZE);
 
     memcpy(promise_init_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, promise_init_msg, msg_type_length, msg_data_length);
@@ -500,34 +503,31 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   uint8_t hash[RLC_MD_LEN];
 
   uint8_t *serialized_message = NULL;
-  uint8_t out[RLC_PAILLIER_CTX_SIZE];
-  int in_len = bn_size_bin(state->keys->paillier_pk->pk);
-  int out_len = RLC_PAILLIER_CTX_SIZE - 1;
 
   message_t payment_sign_done_msg;
   message_null(payment_sign_done_msg);
 
+  cl_ciphertext_t ctx_alpha_times_beta_times_tau;
   bn_t q, r, x, s_2;
-  bn_t ctx_alpha_plus_beta_plus_tau;
   ec_t R_1, R, g_to_the_gamma;
   zk_proof_t pi_1;
 
+  cl_ciphertext_null(ctx_alpha_times_beta_times_tau);
   bn_null(q);
   bn_null(r);
   bn_null(x);
   bn_null(s_2);
-  bn_null(ctx_alpha_plus_beta_plus_tau);
   ec_null(R_1);
   ec_null(R);
   ec_null(g_to_the_gamma);
   zk_proof_null(pi_1);
 
   TRY {
+    cl_ciphertext_new(ctx_alpha_times_beta_times_tau);
     bn_new(q);
     bn_new(r);
     bn_new(x);
     bn_new(s_2);
-    bn_new(ctx_alpha_plus_beta_plus_tau);
     ec_new(R_1);
     ec_new(R);
     ec_new(g_to_the_gamma);
@@ -537,7 +537,12 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_read_bin(R_1, data, RLC_EC_SIZE_COMPRESSED);
     ec_read_bin(pi_1->a, data + RLC_EC_SIZE_COMPRESSED, RLC_EC_SIZE_COMPRESSED);
     bn_read_bin(pi_1->z, data + (2 * RLC_EC_SIZE_COMPRESSED), RLC_BN_SIZE);
-    bn_read_bin(ctx_alpha_plus_beta_plus_tau, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_PAILLIER_CTX_SIZE);
+
+    char ct_str[RLC_CL_CIPHERTEXT_SIZE];
+    memcpy(ct_str, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    ctx_alpha_times_beta_times_tau->c1 = gp_read_str(ct_str);
+    memcpy(ct_str, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    ctx_alpha_times_beta_times_tau->c2 = gp_read_str(ct_str);
 
     // Verify ZK proof.
     if (zk_dlog_verify(pi_1, R_1) != RLC_OK) {
@@ -545,11 +550,11 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     // Decrypt the ciphertext.
-    bn_write_bin(out, out_len, ctx_alpha_plus_beta_plus_tau);
-    if (cp_phpe_dec(out, in_len, out, out_len, state->keys->paillier_pk->pk, state->keys->paillier_sk->sk) != RLC_OK) {
+    GEN gamma;
+    if (cl_dec(&gamma, ctx_alpha_times_beta_times_tau, state->keys->cl_sk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
-    bn_read_bin(state->gamma, out, in_len);
+    bn_read_str(state->gamma, GENtostr(gamma), strlen(GENtostr(gamma)), 10);
 
     // Compute the half Schnorr signature.
     ec_mul_gen(g_to_the_gamma, state->gamma);
@@ -619,11 +624,11 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   } CATCH_ANY {
     result_status = RLC_ERR;
   } FINALLY {
+    cl_ciphertext_free(ctx_alpha_times_beta_times_tau);
     bn_free(q);
     bn_free(r);
     bn_free(x);
     bn_free(s_2);
-    bn_free(ctx_alpha_plus_beta_plus_tau);
     ec_free(R_1);
     ec_free(R);
     ec_free(g_to_the_gamma);
@@ -787,13 +792,23 @@ int main(void)
   TRY {
     tumbler_state_new(state);
 
-    read_keys_from_file_tumbler(state->keys->ec_sk,
-                                state->ec_pk_tumbler_alice,
-                                state->ec_pk_tumbler_bob,
-                                state->keys->paillier_sk,
-                                state->keys->paillier_pk,
-                                state->paillier_pk_alice,
-                                state->paillier_pk_bob);
+    if (generate_cl_params(state->cl_params) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
+
+    // if (generate_keys_and_write_to_file(state->cl_params) != RLC_OK) {
+    //   THROW(ERR_CAUGHT);
+    // }
+
+    if (read_keys_from_file_tumbler(state->keys->ec_sk,
+                                    state->ec_pk_tumbler_alice,
+                                    state->ec_pk_tumbler_bob,
+                                    state->keys->cl_sk,
+                                    state->keys->cl_pk,
+                                    state->cl_pk_alice,
+                                    state->cl_pk_bob) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
 
     while (1) {
       if (receive_message(state, socket) != RLC_OK) {

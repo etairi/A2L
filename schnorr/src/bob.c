@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "relic/relic.h"
+#include "pari/pari.h"
 #include "zmq.h"
 #include "bob.h"
 #include "types.h"
@@ -168,7 +169,13 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_read_bin(state->com->r, data + RLC_EC_SIZE_COMPRESSED + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
     ec_read_bin(pi_alpha->a, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
     bn_read_bin(pi_alpha->z, data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE);
-    bn_read_bin(state->ctx_alpha, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_PAILLIER_CTX_SIZE);
+
+    char ctx_str[RLC_CL_CIPHERTEXT_SIZE];
+    memcpy(ctx_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_CL_CIPHERTEXT_SIZE);
+    state->ctx_alpha->c1 = gp_read_str(ctx_str);
+    memzero(ctx_str, RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    state->ctx_alpha->c2 = gp_read_str(ctx_str);
 
     // Verify ZK proof.
     if (zk_dlog_verify(pi_alpha, state->g_to_the_alpha) != RLC_OK) {
@@ -430,62 +437,52 @@ int puzzle_share(bob_state_t state, void *socket) {
   int result_status = RLC_OK;
 
   uint8_t *serialized_message = NULL;
-  uint8_t in[RLC_PAILLIER_CTX_SIZE];
-  uint8_t out[RLC_PAILLIER_CTX_SIZE];
-  int in_len = bn_size_bin(state->tumbler_paillier_pk->pk);
-  int out_len = RLC_PAILLIER_CTX_SIZE;
   
   message_t puzzle_share_msg;
   message_null(puzzle_share_msg);
 
-  bn_t q, s, ctx_beta, ctx_alpha_plus_beta;
-  ec_t g_to_the_beta;
-  ec_t g_to_the_alpha_plus_beta;
+  cl_ciphertext_t ctx_alpha_times_beta;
+  bn_t q, ctx_beta;
+  ec_t g_to_the_alpha_times_beta;
 
+  cl_ciphertext_null(ctx_alpha_times_beta);
   bn_null(q);
-  bn_null(s);
   bn_null(ctx_beta);
-  bn_null(ctx_alpha_plus_beta);
-  ec_null(g_to_the_beta);
-  ec_null(g_to_the_alpha_plus_beta);
+  ec_null(g_to_the_alpha_times_beta);
 
   TRY {
+    cl_ciphertext_new(ctx_alpha_times_beta);
     bn_new(q);
-    bn_new(s);
     bn_new(ctx_beta);
-    bn_new(ctx_alpha_plus_beta);
-    ec_new(g_to_the_beta);
-    ec_new(g_to_the_alpha_plus_beta);
+    ec_new(g_to_the_alpha_times_beta);
 
     ec_curve_get_ord(q);
 
     // Randomize the promise challenge.
     bn_rand_mod(state->beta, q);
-    ec_mul_gen(g_to_the_beta, state->beta);
-    ec_add(g_to_the_alpha_plus_beta, state->g_to_the_alpha, g_to_the_beta);
-    ec_norm(g_to_the_alpha_plus_beta, g_to_the_alpha_plus_beta);
+    ec_mul(g_to_the_alpha_times_beta, state->g_to_the_alpha, state->beta);
+    ec_norm(g_to_the_alpha_times_beta, g_to_the_alpha_times_beta);
 
     // Homomorphically randomize the challenge ciphertext.
-    bn_write_bin(in, in_len, state->beta);
-		if (cp_phpe_enc(out, &out_len, in, in_len, state->tumbler_paillier_pk->pk) != RLC_OK) {
-      THROW(ERR_CAUGHT);
-    }
-    bn_read_bin(ctx_beta, out, out_len);
+    const unsigned beta_str_len = bn_size_str(state->beta, 10);
+    char beta_str[beta_str_len];
+    bn_write_str(beta_str, beta_str_len, state->beta, 10);
 
-    bn_sqr(s, state->tumbler_paillier_pk->pk);
-		bn_mul(ctx_alpha_plus_beta, state->ctx_alpha, ctx_beta);
-		bn_mod(ctx_alpha_plus_beta, ctx_alpha_plus_beta, s);
+    GEN plain_beta = strtoi(beta_str);
+    ctx_alpha_times_beta->c1 = nupow(state->ctx_alpha->c1, plain_beta, NULL);
+    ctx_alpha_times_beta->c2 = nupow(state->ctx_alpha->c2, plain_beta, NULL);
 
     // Build and define the message.
     char *msg_type = "puzzle_share";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = RLC_EC_SIZE_COMPRESSED + RLC_PAILLIER_CTX_SIZE;
+    const unsigned msg_data_length = RLC_EC_SIZE_COMPRESSED + (2 * RLC_CL_CIPHERTEXT_SIZE);
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(puzzle_share_msg, msg_type_length, msg_data_length);
 
     // Serialize the data for the message.
-    ec_write_bin(puzzle_share_msg->data, RLC_EC_SIZE_COMPRESSED, g_to_the_alpha_plus_beta, 1);
-    bn_write_bin(puzzle_share_msg->data + RLC_EC_SIZE_COMPRESSED, RLC_PAILLIER_CTX_SIZE, ctx_alpha_plus_beta);
+    ec_write_bin(puzzle_share_msg->data, RLC_EC_SIZE_COMPRESSED, g_to_the_alpha_times_beta, 1);
+    memcpy(puzzle_share_msg->data + RLC_EC_SIZE_COMPRESSED, GENtostr(ctx_alpha_times_beta->c1), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(puzzle_share_msg->data + RLC_EC_SIZE_COMPRESSED + RLC_CL_CIPHERTEXT_SIZE, GENtostr(ctx_alpha_times_beta->c2), RLC_CL_CIPHERTEXT_SIZE);
     
     // Serialize the message.
     memcpy(puzzle_share_msg->type, msg_type, msg_type_length);
@@ -508,12 +505,10 @@ int puzzle_share(bob_state_t state, void *socket) {
   } CATCH_ANY {
     result_status = RLC_ERR;
   } FINALLY {
+    cl_ciphertext_free(ctx_alpha_times_beta);
     bn_free(q);
-    bn_free(s);
     bn_free(ctx_beta);
-    bn_free(ctx_alpha_plus_beta);
-    ec_free(g_to_the_beta);
-    ec_free(g_to_the_alpha_plus_beta);
+    ec_free(g_to_the_alpha_times_beta);
     if (puzzle_share_msg != NULL) message_free(puzzle_share_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
@@ -549,21 +544,25 @@ int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data)
   uint8_t *tx_msg = malloc(tx_len + RLC_FC_BYTES);
   uint8_t hash[RLC_MD_LEN];
 
-  bn_t q, alpha, alpha_hat;
+  bn_t x, q, alpha, alpha_hat, beta_inverse;
   bn_t ev, rv;
   ec_t p;
 
+  bn_null(x);
   bn_null(q);
   bn_null(alpha);
   bn_null(alpha_hat);
+  bn_null(beta_inverse);
   bn_null(ev);
   bn_null(rv);
   ec_null(p);
 
   TRY {
+    bn_new(x);
     bn_new(q);
     bn_new(alpha);
     bn_new(alpha_hat);
+    bn_new(beta_inverse);
     bn_new(ev);
     bn_new(rv);
     ec_new(p);
@@ -574,7 +573,12 @@ int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data)
     ec_curve_get_ord(q);
 
     // Extract the secret alpha.
-    bn_sub(alpha, alpha_hat, state->beta);
+    bn_gcd_ext(x, beta_inverse, NULL, state->beta, q);
+    if (bn_sign(beta_inverse) == RLC_NEG) {
+      bn_add(beta_inverse, beta_inverse, q);
+    }
+
+    bn_mul(alpha, alpha_hat, beta_inverse);
     bn_mod(alpha, alpha, q);
 
     // Complete the "almost" signature.
@@ -620,9 +624,11 @@ int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data)
   } CATCH_ANY {
     result_status = RLC_ERR;
   } FINALLY {
+    bn_free(x);
     bn_free(q);
     bn_free(alpha)
     bn_free(alpha_hat);
+    bn_free(beta_inverse);
     bn_free(ev);
     bn_free(rv);
     bn_free(p);
@@ -669,11 +675,11 @@ int main(void)
     read_keys_from_file_alice_bob(BOB_KEY_FILE_PREFIX,
                                   state->keys->ec_sk,
                                   state->keys->ec_pk,
-                                  state->keys->paillier_sk,
-                                  state->keys->paillier_pk,
-                                  state->tumbler_paillier_pk);
+                                  state->keys->cl_sk,
+                                  state->keys->cl_pk,
+                                  state->tumbler_cl_pk);
 
-    start_time = timer();
+    start_time = ttimer();
     if (promise_init(socket) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
@@ -683,7 +689,7 @@ int main(void)
         THROW(ERR_CAUGHT);
       }
     }
-    stop_time = timer();
+    stop_time = ttimer();
     total_time = stop_time - start_time;
     printf("\nPromise procedure time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
@@ -739,7 +745,7 @@ int main(void)
         THROW(ERR_CAUGHT);
       }
     }
-    stop_time = timer();
+    stop_time = ttimer();
     total_time = stop_time - start_time;
     printf("\nTotal time: %.5f sec\n", total_time / CLOCK_PRECISION);
   } CATCH_ANY {
