@@ -48,11 +48,6 @@ int read_keys_from_file_tumbler(ec_secret_key_t ec_secret_key,
 																cl_public_key_t cl_public_key_alice,
 																cl_public_key_t cl_public_key_bob);
 
-void print_ec_secret_key(const char* name, const ec_secret_key_t secret_key);
-void print_ec_public_key(const char* name, const ec_public_key_t public_key);
-void print_paillier_secret_key(const char* name, const paillier_secret_key_t secret_key);
-void print_paillier_public_key(const char* name, const paillier_public_key_t public_key);
-
 int generate_cl_params(cl_params_t params);
 int cl_enc(cl_ciphertext_t ciphertext,
 					 const GEN plaintext,

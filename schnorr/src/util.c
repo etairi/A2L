@@ -405,47 +405,13 @@ int read_keys_from_file_tumbler(ec_secret_key_t ec_secret_key,
 	return result_status;
 }
 
-void print_ec_secret_key(const char* name, const ec_secret_key_t secret_key) {
-	printf("\n%s's EC secret key\n", name);
-	printf("sk:\n");
-	bn_print(secret_key->sk);
-}
-
-void print_ec_public_key(const char* name, const ec_public_key_t public_key) {
-	printf("\n%s's EC public key\n", name);
-	printf("pk:\n");
-	ec_print(public_key->pk);
-}
-
-void print_paillier_secret_key(const char* name, const paillier_secret_key_t secret_key) {
-	printf("\n%s's Paillier secret key\n", name);
-	printf("sk:\n");
-	bn_print(secret_key->sk);
-}
-
-void print_paillier_public_key(const char* name, const paillier_public_key_t public_key) {
-	printf("\n%s's Paillier public key\n", name);
-	printf("pk:\n");
-	bn_print(public_key->pk);
-}
-
 int generate_cl_params(cl_params_t params) {
 	int result_status = RLC_OK;
 
-	bn_t q;
-	bn_null(q);
-
 	TRY {
-		bn_new(q);
-		ec_curve_get_ord(q);
-
 		if (params == NULL) {
 			THROW(ERR_CAUGHT);
 		}
-
-		const unsigned q_str_len = bn_size_str(q, 10);
-		char q_str[q_str_len];
-		bn_write_str(q_str, q_str_len, q, 10);
 
 		// Parameters generated using HSM.sage script.
 		params->Delta_K = negi(strtoi("7917297328878683784842235952488620683924100338715963369693275768732162831834859052302716918416013031853265985178593375655994934704463023676296364363803257769443921988228513012040548137047446483986199954435962221122006965317176921759968659376932101987729556148116190707955808747136944623277094531007901655971804163515065712136708172984834192213773138039179492400722665370317221867505959207212674207052581946756527848674480328854830559945140752059719739492686061412113598389028096554833252668553020964851121112531561161799093718416247246137641387797659"));
@@ -457,12 +423,10 @@ int generate_cl_params(cl_params_t params) {
     GEN g_q_c = strtoi("7226982982667784284607340011220616424554394853592495056851825214613723615410492468400146084481943091452495677425649405002137153382700126963171182913281089395393193450415031434185562111748472716618186256410737780813669746598943110785615647848722934493732187571819575328802273312361412673162473673367423560300753412593868713829574117975260110889575205719");
 
 		// Order of the secp256k1 elliptic curve group and the group G^q.
-		params->q = strtoi(q_str); // 115792089237316195423570985008687907852837564279074904382605163141518161494337
+		params->q = strtoi("115792089237316195423570985008687907852837564279074904382605163141518161494337");
 		params->g_q = qfi(g_q_a, g_q_b, g_q_c);
 	} CATCH_ANY {
 		result_status = RLC_ERR;
-	} FINALLY {
-		bn_free(q);
 	}
 
 	return result_status;
