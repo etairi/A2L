@@ -267,54 +267,6 @@ typedef ec_public_key_st *ec_public_key_t;
   } while (0)
 
 typedef struct {
-  bn_t sk;
-} paillier_secret_key_st;
-
-typedef paillier_secret_key_st *paillier_secret_key_t;
-
-#define paillier_secret_key_null(secret_key) secret_key = NULL;
-
-#define paillier_secret_key_new(secret_key)                     \
-  do {                                                          \
-    secret_key = malloc(sizeof(paillier_secret_key_st));        \
-    if (secret_key == NULL) {                                   \
-      THROW(ERR_NO_MEMORY);                                     \
-    }                                                           \
-    bn_new((secret_key)->sk);                                   \
-  } while (0)
-
-#define paillier_secret_key_free(secret_key)                    \
-  do {                                                          \
-    bn_free((secret_key)->sk);                                  \
-    free(secret_key);                                           \
-    secret_key = NULL;                                          \
-  } while (0)
-
-typedef struct {
-  bn_t pk;
-} paillier_public_key_st;
-
-typedef paillier_public_key_st *paillier_public_key_t;
-
-#define paillier_public_key_null(public_key) public_key = NULL;
-
-#define paillier_public_key_new(public_key)                     \
-  do {                                                          \
-    public_key = malloc(sizeof(paillier_public_key_st));        \
-    if (public_key == NULL) {                                   \
-      THROW(ERR_NO_MEMORY);                                     \
-    }                                                           \
-    bn_new((public_key)->pk);                                   \
-  } while (0)
-
-#define paillier_public_key_free(public_key)                    \
-  do {                                                          \
-    bn_free((public_key)->pk);                                  \
-    free(public_key);                                           \
-    public_key = NULL;                                          \
-  } while (0)
-
-typedef struct {
   cl_public_key_t cl_pk;
   cl_secret_key_t cl_sk;
   ec_public_key_t ec_pk;
