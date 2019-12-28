@@ -152,16 +152,19 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   bn_t q;
   zk_proof_t pi_alpha;
   zk_proof_t pi_1_prime;
+  zk_proof_cldl_t pi_cldl;
 
   bn_null(q);
   zk_proof_null(pi_alpha);
   zk_proof_null(pi_1_prime);
+  zk_proof_cldl_null(pi_cldl);
   message_null(promise_sign_msg);
 
   TRY {
     bn_new(q);
     zk_proof_new(pi_alpha);
     zk_proof_new(pi_1_prime);
+    zk_proof_cldl_new(pi_cldl);
 
     // Deserialize the data from the message.
     ec_read_bin(state->g_to_the_alpha, data, RLC_EC_SIZE_COMPRESSED);
@@ -177,17 +180,36 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     memcpy(ctx_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
     state->ctx_alpha->c2 = gp_read_str(ctx_str);
 
-    // Verify ZK proof.
+    char pi_cldl_str[RLC_CLDL_PROOF_T1_SIZE];
+    memcpy(pi_cldl_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE),
+           RLC_CLDL_PROOF_T1_SIZE);
+    pi_cldl->t1 = gp_read_str(pi_cldl_str);
+    ec_read_bin(pi_cldl->t2, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+              + RLC_CLDL_PROOF_T1_SIZE, RLC_EC_SIZE_COMPRESSED);
+    memcpy(pi_cldl_str, data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+         + RLC_CLDL_PROOF_T1_SIZE, RLC_CLDL_PROOF_T3_SIZE);
+    pi_cldl->t3 = gp_read_str(pi_cldl_str);
+    memcpy(pi_cldl_str, data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+         + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE, RLC_CLDL_PROOF_U1_SIZE);
+    pi_cldl->u1 = gp_read_str(pi_cldl_str);
+    memcpy(pi_cldl_str, data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+         + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE, RLC_CLDL_PROOF_U2_SIZE);
+    pi_cldl->u2 = gp_read_str(pi_cldl_str);
+
+    // Verify ZK proofs.
     if (zk_dlog_verify(pi_alpha, state->g_to_the_alpha) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
 
     ec_curve_get_ord(q);
-
     bn_rand_mod(state->k_1_prime, q);
     ec_mul_gen(state->R_1_prime, state->k_1_prime);
 
     if (zk_dlog_prove(pi_1_prime, state->R_1_prime, state->k_1_prime) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
+
+    if (zk_cldl_verify(pi_cldl, state->g_to_the_alpha, state->ctx_alpha, state->tumbler_cl_pk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
 
@@ -226,6 +248,7 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     bn_free(q);
     zk_proof_free(pi_alpha);
     zk_proof_free(pi_1_prime);
+    zk_proof_cldl_free(pi_cldl);
     if (promise_sign_msg != NULL) message_free(promise_sign_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
@@ -645,7 +668,7 @@ int main(void)
   PUZZLE_SHARED = 0;
   PUZZLE_SOLVED = 0;
 
-  unsigned long start_time, stop_time, total_time;
+  long long start_time, stop_time, total_time;
 
   bob_state_t state;
   bob_state_null(state);
@@ -672,12 +695,18 @@ int main(void)
   TRY {
     bob_state_new(state);
 
-    read_keys_from_file_alice_bob(BOB_KEY_FILE_PREFIX,
-                                  state->keys->ec_sk,
-                                  state->keys->ec_pk,
-                                  state->keys->cl_sk,
-                                  state->keys->cl_pk,
-                                  state->tumbler_cl_pk);
+    if (generate_cl_params(state->cl_params) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
+
+    if (read_keys_from_file_alice_bob(BOB_KEY_FILE_PREFIX,
+                                      state->keys->ec_sk,
+                                      state->keys->ec_pk,
+                                      state->keys->cl_sk,
+                                      state->keys->cl_pk,
+                                      state->tumbler_cl_pk) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
 
     start_time = ttimer();
     if (promise_init(socket) != RLC_OK) {
@@ -745,6 +774,7 @@ int main(void)
         THROW(ERR_CAUGHT);
       }
     }
+
     stop_time = ttimer();
     total_time = stop_time - start_time;
     printf("\nTotal time: %.5f sec\n", total_time / CLOCK_PRECISION);

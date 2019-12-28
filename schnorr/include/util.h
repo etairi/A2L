@@ -9,6 +9,11 @@
 #define RLC_CL_SECRET_KEY_SIZE 290
 #define RLC_CL_PUBLIC_KEY_SIZE 1070
 #define RLC_CL_CIPHERTEXT_SIZE 1550
+#define RLC_CLDL_PROOF_T1_SIZE 1070
+#define RLC_CLDL_PROOF_T2_SIZE 33
+#define RLC_CLDL_PROOF_T3_SIZE 1070
+#define RLC_CLDL_PROOF_U1_SIZE 315
+#define RLC_CLDL_PROOF_U2_SIZE 80
 
 #define RLC_PAILLIER_CTX_SIZE (RLC_BN_BITS / 8 + 1)
 #define RLC_PAILLIER_KEY_SIZE 256
@@ -61,6 +66,16 @@ int cl_dec(GEN *plaintext,
 int commit(commit_t com, const ec_t x);
 int decommit(const commit_t com, const ec_t x);
 
+int zk_cldl_prove(zk_proof_cldl_t proof,
+									const GEN x,
+									const cl_ciphertext_t ciphertext,
+									const cl_public_key_t public_key,
+									const cl_params_t params);
+int zk_cldl_verify(const zk_proof_cldl_t proof,
+									 const ec_t Q,
+									 const cl_ciphertext_t ciphertext,
+									 const cl_public_key_t public_key,
+									 const cl_params_t params);
 int zk_dlog_prove(zk_proof_t proof, const ec_t h, const bn_t w);
 int zk_dlog_verify(const zk_proof_t proof, const ec_t h);
 

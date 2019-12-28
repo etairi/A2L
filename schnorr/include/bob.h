@@ -38,6 +38,7 @@ static symstruct_t msg_lookuptable[] = {
 
 typedef struct {
   keys_t keys;
+  cl_params_t cl_params;
   cl_public_key_t tumbler_cl_pk;
   commit_t com;
   ec_t g_to_the_alpha;
@@ -60,6 +61,7 @@ typedef bob_state_st *bob_state_t;
       THROW(ERR_NO_MEMORY);                                 \
     }                                                       \
     keys_new((state)->keys);                                \
+    cl_params_new((state)->cl_params);                      \
     cl_public_key_new((state)->tumbler_cl_pk);              \
     commit_new((state)->com);                               \
     ec_new((state)->g_to_the_alpha);                        \
@@ -74,6 +76,7 @@ typedef bob_state_st *bob_state_t;
 #define bob_state_free(state)                               \
   do {                                                      \
     keys_free((state)->keys);                               \
+    cl_params_free((state)->cl_params);                     \
     cl_public_key_free((state)->tumbler_cl_pk);             \
     commit_free((state)->com);                              \
     ec_free((state)->g_to_the_alpha);                       \

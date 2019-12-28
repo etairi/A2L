@@ -594,7 +594,7 @@ int main(void)
   PUZZLE_SHARED = 0;
   PUZZLE_SOLVED = 0;
 
-  unsigned long start_time, stop_time, total_time;
+  long long start_time, stop_time, total_time;
 
   alice_state_t state;
   alice_state_null(state);
@@ -621,12 +621,14 @@ int main(void)
   TRY {
     alice_state_new(state);
 
-    read_keys_from_file_alice_bob(ALICE_KEY_FILE_PREFIX,
-                                  state->keys->ec_sk,
-                                  state->keys->ec_pk,
-                                  state->keys->cl_sk,
-                                  state->keys->cl_pk,
-                                  state->tumbler_cl_pk);
+    if (read_keys_from_file_alice_bob(ALICE_KEY_FILE_PREFIX,
+                                      state->keys->ec_sk,
+                                      state->keys->ec_pk,
+                                      state->keys->cl_sk,
+                                      state->keys->cl_pk,
+                                      state->tumbler_cl_pk) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
 
     while (!PUZZLE_SHARED) {
       if (receive_message(state, socket) != RLC_OK) {
@@ -663,6 +665,7 @@ int main(void)
         THROW(ERR_CAUGHT);
       }
     }
+    
     stop_time = ttimer();
     total_time = stop_time - start_time;
     printf("\nPayment procedure time: %.5f sec\n", total_time / CLOCK_PRECISION);

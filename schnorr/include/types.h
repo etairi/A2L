@@ -45,26 +45,54 @@ typedef struct {
 
 typedef zk_proof_st *zk_proof_t;
 
-#define zk_proof_null(zk_proof) zk_proof = NULL;
+#define zk_proof_null(proof) proof = NULL;
 
-#define zk_proof_new(zk_proof)                \
+#define zk_proof_new(proof)                   \
   do {                                        \
-    zk_proof = malloc(sizeof(zk_proof_st));   \
-    if (zk_proof == NULL) {                   \
+    proof = malloc(sizeof(zk_proof_st));      \
+    if (proof == NULL) {                      \
       THROW(ERR_NO_MEMORY);                   \
     }                                         \
-    ec_new((zk_proof)->a);                    \
-    ec_new((zk_proof)->b);                    \
-    bn_new((zk_proof)->z);                    \
+    ec_new((proof)->a);                       \
+    ec_new((proof)->b);                       \
+    bn_new((proof)->z);                       \
   } while (0)
 
-#define zk_proof_free(zk_proof)               \
+#define zk_proof_free(proof)                  \
   do {                                        \
-    ec_free((zk_proof)->a);                   \
-    ec_free((zk_proof)->b);                   \
-    bn_free((zk_proof)->z);                   \
-    free(zk_proof);                           \
-    zk_proof = NULL;                          \
+    ec_free((proof)->a);                      \
+    ec_free((proof)->b);                      \
+    bn_free((proof)->z);                      \
+    free(proof);                              \
+    proof = NULL;                             \
+  } while (0)
+
+typedef struct {
+  GEN t1;
+  ec_t t2;
+  GEN t3;
+  GEN u1;
+  GEN u2;
+} zk_proof_cldl_st;
+
+typedef zk_proof_cldl_st *zk_proof_cldl_t;
+
+#define zk_proof_cldl_null(proof) proof = NULL;
+
+#define zk_proof_cldl_new(proof)              \
+  do {                                        \
+    proof = malloc(sizeof(zk_proof_cldl_st)); \
+    if (proof == NULL) {                      \
+      THROW(ERR_NO_MEMORY);                   \
+    }                                         \
+    ec_new((proof)->t2);                      \
+  } while (0)
+
+#define zk_proof_cldl_free(proof)             \
+  do {                                        \
+    ec_free((proof)->t2);                     \
+    free(proof);                              \
+    proof = NULL;                             \
   } while (0)
 
 typedef struct {
@@ -96,7 +124,9 @@ typedef commit_st *commit_t;
 
 typedef struct {
   GEN Delta_K;  // fundamental discriminant
+  GEN E;        // the secp256k1 elliptic curve
   GEN q;        // the order of the elliptic curve
+  GEN G;        // the generator of the elliptic curve group
   GEN g_q;      // the generator of G^q
   GEN bound;    // the bound for exponentiation
 } cl_params_st;
@@ -122,6 +152,7 @@ typedef cl_params_st *cl_params_t;
 typedef struct {
   GEN c1;
   GEN c2;
+  GEN r;
 } cl_ciphertext_st;
 
 typedef cl_ciphertext_st *cl_ciphertext_t;

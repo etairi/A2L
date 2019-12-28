@@ -425,6 +425,16 @@ int generate_cl_params(cl_params_t params) {
 		// Order of the secp256k1 elliptic curve group and the group G^q.
 		params->q = strtoi("115792089237316195423570985008687907852837564279074904382605163141518161494337");
 		params->g_q = qfi(g_q_a, g_q_b, g_q_c);
+
+		GEN A = strtoi("0");
+		GEN B = strtoi("7");
+		GEN p = strtoi("115792089237316195423570985008687907853269984665640564039457584007908834671663");
+		GEN coeff = mkvecn(2, A, B);
+		params->E = ellinit(coeff, p, 1);
+
+		GEN Gx = strtoi("0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
+		GEN Gy = strtoi("0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8");
+		params->G = mkvecn(2, Gx, Gy);
 	} CATCH_ANY {
 		result_status = RLC_ERR;
 	}
@@ -439,8 +449,8 @@ int cl_enc(cl_ciphertext_t ciphertext,
   int result_status = RLC_OK;
 
   TRY {
-    GEN r = randomi(params->bound);
-    ciphertext->c1 = nupow(params->g_q, r, NULL);
+    ciphertext->r = randomi(params->bound);
+    ciphertext->c1 = nupow(params->g_q, ciphertext->r, NULL);
 
     GEN L = Fp_inv(plaintext, params->q);
     if (!mpodd(L)) {
@@ -449,7 +459,7 @@ int cl_enc(cl_ciphertext_t ciphertext,
 
 		// f^plaintext = (q^2, Lq, (L - Delta_k) / 4)
     GEN fm = qfi(sqri(params->q), mulii(L, params->q), shifti(subii(sqri(L), params->Delta_K), -2));
-    ciphertext->c2 = gmul(nupow(public_key->pk, r, NULL), fm);
+    ciphertext->c2 = gmul(nupow(public_key->pk, ciphertext->r, NULL), fm);
   } CATCH_ANY {
     result_status = RLC_ERR;
   }
@@ -559,6 +569,170 @@ int decommit(const commit_t com, const ec_t x) {
 	return result_status;
 }
 
+int zk_cldl_prove(zk_proof_cldl_t proof,
+									const GEN x,
+									const cl_ciphertext_t ciphertext,
+									const cl_public_key_t public_key,
+									const cl_params_t params) {
+	int result_status = RLC_OK;
+
+	bn_t rlc_k, rlc_r2, rlc_soundness;
+	bn_null(rlc_k);
+	bn_null(rlc_r2);
+	bn_null(rlc_soundness);
+
+	TRY {
+		bn_new(rlc_k);
+		bn_new(rlc_r2);
+		bn_new(rlc_soundness);
+
+		// [\tilde{A} \cdot C \cdot 2^40], we take C to be of size 2^40 as well.
+		GEN soundness = shifti(gen_1, 40);
+		GEN dist = mulii(mulii(params->bound, soundness), shifti(gen_1, 40));
+		GEN r1 = randomi(dist);
+		GEN r2 = randomi(params->q);
+
+		bn_read_str(rlc_r2, GENtostr(r2), strlen(GENtostr(r2)), 10);
+		bn_read_str(rlc_soundness, GENtostr(soundness), strlen(GENtostr(soundness)), 10);
+
+		GEN L = Fp_inv(r2, params->q);
+		if (!mpodd(L)) {
+			L = subii(L, params->q);
+		}
+		// f^r_2 = (q^2, Lq, (L - Delta_k) / 4)
+		GEN fr2 = qfi(sqri(params->q), mulii(L, params->q), shifti(subii(sqri(L), params->Delta_K), -2));
+
+		proof->t1 = gmul(nupow(public_key->pk, r1, NULL), fr2); // pk^r_1 \cdot f^r_2
+		ec_mul_gen(proof->t2, rlc_r2);													// g^r_2
+		proof->t3 = nupow(params->g_q, r1, NULL);								// g_q^r_1
+
+		const unsigned SERIALIZED_LEN = RLC_EC_SIZE_COMPRESSED + strlen(GENtostr(proof->t1)) + strlen(GENtostr(proof->t3));
+		uint8_t serialized[SERIALIZED_LEN];
+		uint8_t hash[RLC_MD_LEN];
+
+		memcpy(serialized, (uint8_t *) GENtostr(proof->t1), strlen(GENtostr(proof->t1)));
+		ec_write_bin(serialized + strlen(GENtostr(proof->t1)), RLC_EC_SIZE_COMPRESSED, proof->t2, 1);
+		memcpy(serialized + strlen(GENtostr(proof->t1)) + RLC_EC_SIZE_COMPRESSED, 
+					(uint8_t *) GENtostr(proof->t3), strlen(GENtostr(proof->t3)));
+		md_map(hash, serialized, SERIALIZED_LEN);
+
+		if (8 * RLC_MD_LEN > bn_bits(rlc_soundness)) {
+			unsigned len = RLC_CEIL(bn_bits(rlc_soundness), 8);
+			bn_read_bin(rlc_k, hash, len);
+			bn_rsh(rlc_k, rlc_k, 8 * RLC_MD_LEN - bn_bits(rlc_soundness));
+		} else {
+			bn_read_bin(rlc_k, hash, RLC_MD_LEN);
+		}
+
+		bn_mod(rlc_k, rlc_k, rlc_soundness);
+
+		const unsigned K_STR_LEN = bn_size_str(rlc_k, 10);
+		char k_str[K_STR_LEN];
+		bn_write_str(k_str, K_STR_LEN, rlc_k, 10);
+		GEN k = strtoi(k_str);
+
+		proof->u1 = addmulii(r1, ciphertext->r, k);	// r_1 + r \cdot k
+		proof->u2 = Fp_addmul(r2, x, k, params->q); // r_2 + x \cdot k
+	} CATCH_ANY {
+		result_status = RLC_ERR;
+	} FINALLY {
+		bn_free(k);
+		bn_free(rlc_r2);
+		bn_free(rlc_soundness);
+	}
+
+	return result_status;
+}
+
+int zk_cldl_verify(const zk_proof_cldl_t proof,
+									 const ec_t Q,
+									 const cl_ciphertext_t ciphertext,
+									 const cl_public_key_t public_key,
+									 const cl_params_t params) {
+	int result_status = RLC_ERR;
+
+	bn_t rlc_k, rlc_u2, rlc_soundness;
+	ec_t g_to_the_u2, Q_to_the_k;
+	ec_t t2_times_Q_to_the_k;
+
+	bn_null(rlc_k);
+	bn_null(rlc_u2);
+	bn_null(rlc_soundness);
+
+	ec_null(g_to_the_u2);
+	ec_null(Q_to_the_k);
+	ec_null(t2_times_Q_to_the_k);
+
+	TRY {
+		bn_new(rlc_k);
+		bn_new(rlc_u2);
+		bn_new(rlc_soundness);
+
+		ec_new(g_to_the_u2);
+		ec_new(Q_to_the_k);
+		ec_new(t2_times_Q_to_the_k);
+
+		// Soundness is 2^-40.
+		GEN soundness = shifti(gen_1, 40);
+		bn_read_str(rlc_soundness, GENtostr(soundness), strlen(GENtostr(soundness)), 10);
+		bn_read_str(rlc_u2, GENtostr(proof->u2), strlen(GENtostr(proof->u2)), 10);
+
+		const unsigned SERIALIZED_LEN = RLC_EC_SIZE_COMPRESSED + strlen(GENtostr(proof->t1)) + strlen(GENtostr(proof->t3));
+		uint8_t serialized[SERIALIZED_LEN];
+		uint8_t hash[RLC_MD_LEN];
+
+		memcpy(serialized, (uint8_t *) GENtostr(proof->t1), strlen(GENtostr(proof->t1)));
+		ec_write_bin(serialized + strlen(GENtostr(proof->t1)), RLC_EC_SIZE_COMPRESSED, proof->t2, 1);
+		memcpy(serialized + strlen(GENtostr(proof->t1)) + RLC_EC_SIZE_COMPRESSED, 
+					(uint8_t *) GENtostr(proof->t3), strlen(GENtostr(proof->t3)));
+		md_map(hash, serialized, SERIALIZED_LEN);
+
+		if (8 * RLC_MD_LEN > bn_bits(rlc_soundness)) {
+			unsigned len = RLC_CEIL(bn_bits(rlc_soundness), 8);
+			bn_read_bin(rlc_k, hash, len);
+			bn_rsh(rlc_k, rlc_k, 8 * RLC_MD_LEN - bn_bits(rlc_soundness));
+		} else {
+			bn_read_bin(rlc_k, hash, RLC_MD_LEN);
+		}
+
+		bn_mod(rlc_k, rlc_k, rlc_soundness);
+
+		const unsigned K_STR_LEN = bn_size_str(rlc_k, 10);
+		char k_str[K_STR_LEN];
+		bn_write_str(k_str, K_STR_LEN, rlc_k, 10);
+		GEN k = strtoi(k_str);
+
+		GEN L = Fp_inv(proof->u2, params->q);
+		if (!mpodd(L)) {
+			L = subii(L, params->q);
+		}
+		// f^u_2 = (q^2, Lq, (L - Delta_k) / 4)
+		GEN fu2 = qfi(sqri(params->q), mulii(L, params->q), shifti(subii(sqri(L), params->Delta_K), -2));
+
+		ec_mul_gen(g_to_the_u2, rlc_u2);
+		ec_mul(Q_to_the_k, Q, rlc_k);
+		ec_add(t2_times_Q_to_the_k, proof->t2, Q_to_the_k);
+		ec_norm(t2_times_Q_to_the_k, t2_times_Q_to_the_k);
+
+		if (gequal(gmul(proof->t1, nupow(ciphertext->c2, k, NULL)), gmul(nupow(public_key->pk, proof->u1, NULL), fu2))
+		&&  ec_cmp(g_to_the_u2, t2_times_Q_to_the_k) == RLC_EQ
+		&&  gequal(gmul(proof->t3, nupow(ciphertext->c1, k, NULL)), nupow(params->g_q, proof->u1, NULL))) {
+			result_status = RLC_OK;
+		}
+	} CATCH_ANY {
+		result_status = RLC_ERR;
+	} FINALLY {
+		bn_free(rlc_k);
+		bn_free(rlc_u2);
+		bn_free(rlc_soundness);
+		ec_free(g_to_the_u2);
+		ec_free(Q_to_the_k);
+		ec_free(t2_times_Q_to_the_k);
+	}
+
+	return result_status;
+}
+
 int zk_dlog_prove(zk_proof_t proof, const ec_t h, const bn_t w) {
 	int result_status = RLC_OK;
 
@@ -579,6 +753,7 @@ int zk_dlog_prove(zk_proof_t proof, const ec_t h, const bn_t w) {
 
 		ec_curve_get_ord(q);
 		bn_rand_mod(r, q);
+
 		ec_mul_gen(proof->a, r);
 		ec_set_infty(proof->b);
 
