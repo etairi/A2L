@@ -9,6 +9,7 @@ challenge with the help of the sender. A2L can be instantiated using either Schn
 * [CMake](https://cmake.org/download/) >= 3.12
 * [GMP](https://gmplib.org/) >= 6.1.2
 * [RELIC](https://github.com/relic-toolkit/relic) (configured with `-DBN_PRECI=4096` and `-DARITH=gmp`)
+* [PARI/GP](https://pari.math.u-bordeaux.fr/) >= 2.11.2
 
 ## Warning
 
@@ -19,4 +20,4 @@ It was developed for experimentation purposes.
 
 ## References
 
-[1]  Erkan Tairi, Pedro-Moreno Sanchez, and Matteo Maffei, "[A2L: Anonymous Atomic Locks for Scalability and Interoperability in Payment Channel Hubs](https://eprint.iacr.org/2019/589)".
+[1] Erkan Tairi, Pedro-Moreno Sanchez, and Matteo Maffei, "[A2L: Anonymous Atomic Locks for Scalability and Interoperability in Payment Channel Hubs](https://eprint.iacr.org/2019/589)".
