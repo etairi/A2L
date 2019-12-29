@@ -9,7 +9,6 @@
 #include "types.h"
 #include "util.h"
 
-// TODO: Remove pi_a.
 int get_message_type(char *key) {
   for (size_t i = 0; i < TOTAL_MESSAGES; i++) {
     symstruct_t sym = msg_lookuptable[i];
@@ -110,21 +109,18 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   bn_t q;
   ec_t x;
   commit_t com;
-  zk_proof_t pi_alpha;
   zk_proof_cldl_t pi_cldl;
   
   message_null(promise_init_msg);
   bn_null(q);
   ec_null(x);
   commit_null(com);
-  zk_proof_null(pi_alpha);
   zk_proof_cldl_null(pi_cldl);
   
   TRY {
     bn_new(q);
     ec_new(x);
     commit_new(com);
-    zk_proof_new(pi_alpha);
     zk_proof_cldl_new(pi_cldl);
 
     ec_curve_get_ord(q);
@@ -136,9 +132,6 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_mul_gen(state->R_2_prime, state->k_2_prime);
     
     if (zk_dlog_prove(state->pi_2_prime, state->R_2_prime, state->k_2_prime) != RLC_OK) {
-      THROW(ERR_CAUGHT);
-    }
-    if (zk_dlog_prove(pi_alpha, state->g_to_the_alpha, state->alpha) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
 
@@ -163,7 +156,7 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Build and define the message.
     char *msg_type = "promise_init_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
+    const unsigned msg_data_length = (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE)
     + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T2_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE + RLC_CLDL_PROOF_U2_SIZE;;
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(promise_init_msg, msg_type_length, msg_data_length);
@@ -172,21 +165,19 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_write_bin(promise_init_msg->data, RLC_EC_SIZE_COMPRESSED, state->g_to_the_alpha, 1);
     bn_write_bin(promise_init_msg->data + RLC_EC_SIZE_COMPRESSED, RLC_BN_SIZE, com->c);
     ec_write_bin(promise_init_msg->data + RLC_EC_SIZE_COMPRESSED + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED, com->r, 1);
-    ec_write_bin(promise_init_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED, pi_alpha->a, 1);
-    bn_write_bin(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE, pi_alpha->z);
-    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE),
+    memcpy(promise_init_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE,
            GENtostr(state->ctx_alpha->c1), RLC_CL_CIPHERTEXT_SIZE);
-    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE,
+    memcpy(promise_init_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + RLC_CL_CIPHERTEXT_SIZE,
            GENtostr(state->ctx_alpha->c2), RLC_CL_CIPHERTEXT_SIZE);
-    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE),
+    memcpy(promise_init_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE),
            GENtostr(pi_cldl->t1), RLC_CLDL_PROOF_T1_SIZE);
-    ec_write_bin(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+    ec_write_bin(promise_init_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE) 
               + RLC_CLDL_PROOF_T1_SIZE, RLC_EC_SIZE_COMPRESSED, pi_cldl->t2, 1);
-    memcpy(promise_init_msg->data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
+    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE)
            + RLC_CLDL_PROOF_T1_SIZE, GENtostr(pi_cldl->t3), RLC_CLDL_PROOF_T3_SIZE);
-    memcpy(promise_init_msg->data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
+    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE)
            + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE, GENtostr(pi_cldl->u1), RLC_CLDL_PROOF_U1_SIZE);
-    memcpy(promise_init_msg->data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
+    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE)
            + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE, GENtostr(pi_cldl->u2), RLC_CLDL_PROOF_U2_SIZE);
 
     memcpy(promise_init_msg->type, msg_type, msg_type_length);
@@ -212,7 +203,6 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_free(q);
     ec_free(x);
     commit_free(com);
-    zk_proof_free(pi_alpha);
     zk_proof_cldl_free(pi_cldl);
     if (promise_init_msg != NULL) message_free(promise_init_msg);
     if (serialized_message != NULL) free(serialized_message);

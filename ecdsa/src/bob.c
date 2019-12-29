@@ -150,19 +150,16 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   message_t promise_sign_msg;
 
   bn_t q;
-  zk_proof_t pi_alpha;
   zk_proof_t pi_1_prime;
   zk_proof_cldl_t pi_cldl;
 
   bn_null(q);
-  zk_proof_null(pi_alpha);
   zk_proof_null(pi_1_prime);
   zk_proof_cldl_null(pi_cldl);
   message_null(promise_sign_msg);
 
   TRY {
     bn_new(q);
-    zk_proof_new(pi_alpha);
     zk_proof_new(pi_1_prime);
     zk_proof_cldl_new(pi_cldl);
 
@@ -170,39 +167,32 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_read_bin(state->g_to_the_alpha, data, RLC_EC_SIZE_COMPRESSED);
     bn_read_bin(state->com->c, data + RLC_EC_SIZE_COMPRESSED, RLC_BN_SIZE);
     ec_read_bin(state->com->r, data + RLC_EC_SIZE_COMPRESSED + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
-    ec_read_bin(pi_alpha->a, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
-    bn_read_bin(pi_alpha->z, data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE);
     
     char ctx_str[RLC_CL_CIPHERTEXT_SIZE];
-    memcpy(ctx_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_CL_CIPHERTEXT_SIZE);
     state->ctx_alpha->c1 = gp_read_str(ctx_str);
     memzero(ctx_str, RLC_CL_CIPHERTEXT_SIZE);
-    memcpy(ctx_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
     state->ctx_alpha->c2 = gp_read_str(ctx_str);
 
     char pi_cldl_str[RLC_CLDL_PROOF_T1_SIZE];
-    memcpy(pi_cldl_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE),
+    memcpy(pi_cldl_str, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE),
            RLC_CLDL_PROOF_T1_SIZE);
     pi_cldl->t1 = gp_read_str(pi_cldl_str);
-    ec_read_bin(pi_cldl->t2, data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+    ec_read_bin(pi_cldl->t2, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE) 
               + RLC_CLDL_PROOF_T1_SIZE, RLC_EC_SIZE_COMPRESSED);
-    memcpy(pi_cldl_str, data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+    memcpy(pi_cldl_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE) 
          + RLC_CLDL_PROOF_T1_SIZE, RLC_CLDL_PROOF_T3_SIZE);
     pi_cldl->t3 = gp_read_str(pi_cldl_str);
-    memcpy(pi_cldl_str, data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+    memcpy(pi_cldl_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE) 
          + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE, RLC_CLDL_PROOF_U1_SIZE);
     pi_cldl->u1 = gp_read_str(pi_cldl_str);
-    memcpy(pi_cldl_str, data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+    memcpy(pi_cldl_str, data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE) 
          + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE, RLC_CLDL_PROOF_U2_SIZE);
     pi_cldl->u2 = gp_read_str(pi_cldl_str);
 
     // Verify ZK proof.
-    if (zk_dlog_verify(pi_alpha, state->g_to_the_alpha) != RLC_OK) {
-      THROW(ERR_CAUGHT);
-    }
-
     ec_curve_get_ord(q);
-
     bn_rand_mod(state->k_1_prime, q);
     ec_mul_gen(state->R_1_prime, state->k_1_prime);
 
@@ -247,7 +237,6 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     result_status = RLC_ERR;
   } FINALLY {
     bn_free(q);
-    zk_proof_free(pi_alpha);
     zk_proof_free(pi_1_prime);
     zk_proof_cldl_free(pi_cldl);
     if (promise_sign_msg != NULL) message_free(promise_sign_msg);
