@@ -3,11 +3,13 @@
 #include <string.h>
 #include <unistd.h>
 #include "relic/relic.h"
+#include "pari/pari.h"
 #include "zmq.h"
 #include "tumbler.h"
 #include "types.h"
 #include "util.h"
 
+// TODO: Remove pi_a.
 int get_message_type(char *key) {
   for (size_t i = 0; i < TOTAL_MESSAGES; i++) {
     symstruct_t sym = msg_lookuptable[i];
@@ -104,27 +106,26 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
   message_t promise_init_msg;
   uint8_t *serialized_message = NULL;
-  uint8_t in[RLC_PAILLIER_CTX_SIZE];
-  uint8_t out[RLC_PAILLIER_CTX_SIZE];
-  int in_len = bn_size_bin(state->keys->paillier_pk->pk);
-  int out_len = RLC_PAILLIER_CTX_SIZE;
 
   bn_t q;
   ec_t x;
   commit_t com;
   zk_proof_t pi_alpha;
+  zk_proof_cldl_t pi_cldl;
   
   message_null(promise_init_msg);
   bn_null(q);
   ec_null(x);
   commit_null(com);
   zk_proof_null(pi_alpha);
+  zk_proof_cldl_null(pi_cldl);
   
   TRY {
     bn_new(q);
     ec_new(x);
     commit_new(com);
     zk_proof_new(pi_alpha);
+    zk_proof_cldl_new(pi_cldl);
 
     ec_curve_get_ord(q);
 
@@ -141,11 +142,18 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
       THROW(ERR_CAUGHT);
     }
 
-    bn_write_bin(in, in_len, state->alpha);
-		if (cp_phpe_enc(out, &out_len, in, in_len, state->keys->paillier_pk->pk) != RLC_OK) {
+    const unsigned alpha_str_len = bn_size_str(state->alpha, 10);
+    char alpha_str[alpha_str_len];
+    bn_write_str(alpha_str, alpha_str_len, state->alpha, 10);
+
+    GEN plain_alpha = strtoi(alpha_str);
+    if (cl_enc(state->ctx_alpha, plain_alpha, state->keys->cl_pk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
-    bn_read_bin(state->ctx_alpha, out, out_len);
+
+    if (zk_cldl_prove(pi_cldl, plain_alpha, state->ctx_alpha, state->keys->cl_pk, state->cl_params) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
 
     ec_add(x, state->R_2_prime, state->pi_2_prime->a);
     if (commit(com, x) != RLC_OK) {
@@ -155,7 +163,8 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Build and define the message.
     char *msg_type = "promise_init_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_PAILLIER_CTX_SIZE;
+    const unsigned msg_data_length = (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
+    + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T2_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE + RLC_CLDL_PROOF_U2_SIZE;;
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(promise_init_msg, msg_type_length, msg_data_length);
 
@@ -165,7 +174,20 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_write_bin(promise_init_msg->data + RLC_EC_SIZE_COMPRESSED + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED, com->r, 1);
     ec_write_bin(promise_init_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED, pi_alpha->a, 1);
     bn_write_bin(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE, pi_alpha->z);
-    bn_write_bin(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_PAILLIER_CTX_SIZE, state->ctx_alpha);
+    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE),
+           GENtostr(state->ctx_alpha->c1), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE,
+           GENtostr(state->ctx_alpha->c2), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE),
+           GENtostr(pi_cldl->t1), RLC_CLDL_PROOF_T1_SIZE);
+    ec_write_bin(promise_init_msg->data + (3 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+              + RLC_CLDL_PROOF_T1_SIZE, RLC_EC_SIZE_COMPRESSED, pi_cldl->t2, 1);
+    memcpy(promise_init_msg->data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
+           + RLC_CLDL_PROOF_T1_SIZE, GENtostr(pi_cldl->t3), RLC_CLDL_PROOF_T3_SIZE);
+    memcpy(promise_init_msg->data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
+           + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE, GENtostr(pi_cldl->u1), RLC_CLDL_PROOF_U1_SIZE);
+    memcpy(promise_init_msg->data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
+           + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE, GENtostr(pi_cldl->u2), RLC_CLDL_PROOF_U2_SIZE);
 
     memcpy(promise_init_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, promise_init_msg, msg_type_length, msg_data_length);
@@ -191,6 +213,7 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_free(x);
     commit_free(com);
     zk_proof_free(pi_alpha);
+    zk_proof_cldl_free(pi_cldl);
     if (promise_init_msg != NULL) message_free(promise_init_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
@@ -205,11 +228,6 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
   int result_status = RLC_OK;
 
-  uint8_t in[RLC_PAILLIER_CTX_SIZE];
-  uint8_t out[RLC_PAILLIER_CTX_SIZE];
-  int in_len = bn_size_bin(state->paillier_pk_bob->pk);
-  int out_len = RLC_PAILLIER_CTX_SIZE;
-
   int tx_len = sizeof(tx);
   uint8_t *tx_msg = NULL;
   uint8_t hash[RLC_MD_LEN];
@@ -222,11 +240,13 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   bn_t k_2_times_r_times_ec_sk_2;
   bn_t k_2_times_e;
   bn_t r_times_ec_sk_2;
-  bn_t ctx_k_2_times_e, ctx_prime;
   ec_t R_prime, R_c_prime;
+  
   zk_proof_t pi_1_prime;
   zk_proof_t pi_c_prime;
   zk_proof_t pi_a_prime;
+  cl_ciphertext_t ctx_k_2_times_e;
+  cl_ciphertext_t ctx_prime;
 
   bn_null(q);
   bn_null(x);
@@ -237,13 +257,14 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   bn_null(k_2_times_r_times_ec_sk_2);
   bn_null(k_2_times_e);
   bn_null(r_times_ec_sk_2);
-  bn_null(ctx_k_2_times_e);
-  bn_null(ctx_prime);
   ec_null(R_prime);
   ec_null(R_c_prime);
+
   zk_proof_null(pi_1_prime);
   zk_proof_null(pi_c_prime);
   zk_proof_null(pi_a_prime);
+  cl_ciphertext_null(ctx_k_2_times_e);
+  cl_ciphertext_null(ctx_prime);
   
   message_null(promise_sign_done_msg);
 
@@ -257,13 +278,14 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_new(k_2_times_r_times_ec_sk_2);
     bn_new(k_2_times_e);
     bn_new(r_times_ec_sk_2);
-    bn_new(ctx_k_2_times_e);
-    bn_new(ctx_prime);
     ec_new(R_prime);
     ec_new(R_c_prime);
+
     zk_proof_new(pi_1_prime);
     zk_proof_new(pi_c_prime);
     zk_proof_new(pi_a_prime);
+    cl_ciphertext_new(ctx_k_2_times_e);
+    cl_ciphertext_new(ctx_prime);
 
     // Deserialize the data from the message.
     ec_read_bin(state->R_1_prime, data, RLC_EC_SIZE_COMPRESSED);
@@ -289,10 +311,6 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     if (zk_dhtuple_prove(pi_a_prime, state->R_2_prime, state->g_to_the_alpha, R_c_prime, state->alpha) != RLC_OK) {
-      THROW(ERR_CAUGHT);
-    }
-
-    if (zk_dhtuple_verify(pi_a_prime, state->R_2_prime, state->g_to_the_alpha, R_c_prime) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
 
@@ -329,22 +347,30 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
     bn_mul(k_2_times_e, k_2_prime_inverse, state->e_prime);
     bn_mod(k_2_times_e, k_2_times_e, q);
-    bn_write_bin(in, in_len, k_2_times_e);
-    if (cp_phpe_enc(out, &out_len, in, in_len, state->paillier_pk_bob->pk) != RLC_OK) {
+
+    const unsigned plain_str_len = bn_size_str(k_2_times_e, 10);
+    char plain_str[plain_str_len];
+    bn_write_str(plain_str, plain_str_len, k_2_times_e, 10);
+
+    GEN plain_k_2_times_e = strtoi(plain_str);
+    if (cl_enc(ctx_k_2_times_e, plain_k_2_times_e, state->cl_pk_bob, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
-    bn_read_bin(ctx_k_2_times_e, out, out_len);
 
-    bn_sqr(s, state->paillier_pk_bob->pk);
-    bn_mxp(ctx_prime, state->ctx_ec_sk_bob, k_2_times_r_times_ec_sk_2, s);
-    bn_mod(ctx_prime, ctx_prime, s);
-    bn_mul(ctx_prime, ctx_prime, ctx_k_2_times_e);
-    bn_mod(ctx_prime, ctx_prime, s);
+    const unsigned v_str_len = bn_size_str(k_2_times_r_times_ec_sk_2, 10);
+    char v_str[v_str_len];
+    bn_write_str(v_str, v_str_len, k_2_times_r_times_ec_sk_2, 10);
+    GEN v = strtoi(v_str);
+
+    ctx_prime->c1 = nupow(state->ctx_ec_sk_bob->c1, v, NULL);
+    ctx_prime->c2 = nupow(state->ctx_ec_sk_bob->c2, v, NULL);
+    ctx_prime->c1 = gmul(ctx_k_2_times_e->c1, ctx_prime->c1);
+    ctx_prime->c2 = gmul(ctx_k_2_times_e->c2, ctx_prime->c2);
 
     // Build and define the message.
     char *msg_type = "promise_sign_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (6 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE) + RLC_PAILLIER_CTX_SIZE;
+    const unsigned msg_data_length = (6 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE);
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(promise_sign_done_msg, msg_type_length, msg_data_length);
 
@@ -358,7 +384,9 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_write_bin(promise_sign_done_msg->data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED, pi_a_prime->a, 1);
     ec_write_bin(promise_sign_done_msg->data + (5 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED, pi_a_prime->b, 1);
     bn_write_bin(promise_sign_done_msg->data + (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_BN_SIZE, pi_a_prime->z);
-    bn_write_bin(promise_sign_done_msg->data + (6 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_PAILLIER_CTX_SIZE, ctx_prime);
+    memcpy(promise_sign_done_msg->data + (6 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), GENtostr(ctx_prime->c1), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(promise_sign_done_msg->data + (6 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, 
+           GENtostr(ctx_prime->c2), RLC_CL_CIPHERTEXT_SIZE);
 
     memcpy(promise_sign_done_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, promise_sign_done_msg, msg_type_length, msg_data_length);
@@ -389,13 +417,13 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_free(k_2_times_r_times_ec_sk_2);
     bn_free(k_2_times_e);
     bn_free(r_times_ec_sk_2);
-    bn_free(ctx_k_2_times_e);
-    bn_free(ctx_prime);
     ec_free(R_prime);
     ec_free(R_c_prime);
     zk_proof_free(pi_1_prime);
     zk_proof_free(pi_c_prime);
     zk_proof_free(pi_a_prime);
+    cl_ciphertext_free(ctx_k_2_times_e);
+    cl_ciphertext_free(ctx_prime);
     if (serialized_message != NULL) free(serialized_message);
     if (promise_sign_done_msg != NULL) message_free(promise_sign_done_msg);
   }
@@ -590,11 +618,6 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   int result_status = RLC_OK;
 
   uint8_t *serialized_message = NULL;
-  uint8_t in[RLC_PAILLIER_CTX_SIZE];
-  uint8_t out[RLC_PAILLIER_CTX_SIZE];
-  int in_len = bn_size_bin(state->paillier_pk_alice->pk);
-  int out_len = RLC_PAILLIER_CTX_SIZE - 1;
-
   int tx_len = sizeof(tx);
   uint8_t *tx_msg = NULL;
   uint8_t hash[RLC_MD_LEN];
@@ -603,12 +626,13 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   message_null(payment_sign_done_msg);
 
   bn_t q, r, x, s, s_2, k_2_times_gamma;
-  bn_t ctx_alpha_times_beta_times_tau;
-  bn_t ctx_k_2_times_e, ctx;
   bn_t k_2_inverse, r_times_ec_sk_2;
   bn_t k_2_times_e, k_2_times_r_times_ec_sk_2;
   ec_t R_1, R_c, R, g_to_the_gamma;
+  
   zk_proof_t pi_1, pi_c, pi_gamma;
+  cl_ciphertext_t ctx_alpha_times_beta_times_tau;
+  cl_ciphertext_t ctx_k_2_times_e, ctx;
 
   bn_null(q);
   bn_null(r);
@@ -620,16 +644,17 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   bn_null(k_2_times_e);
   bn_null(k_2_times_r_times_ec_sk_2);
   bn_null(r_times_ec_sk_2);
-  bn_null(ctx_alpha_times_beta_times_tau);
-  bn_null(ctx_k_2_times_e);
-  bn_null(ctx);
   ec_null(R_1);
   ec_null(R_c);
   ec_null(R);
   ec_null(g_to_the_gamma);
+
   zk_proof_null(pi_1);
   zk_proof_null(pi_c);
   zk_proof_null(pi_gamma);
+  cl_ciphertext_null(ctx_alpha_times_beta_times_tau);
+  cl_ciphertext_null(ctx_k_2_times_e);
+  cl_ciphertext_null(ctx);
 
   TRY {
     bn_new(q);
@@ -641,23 +666,30 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_new(k_2_times_e);
     bn_new(k_2_times_r_times_ec_sk_2);
     bn_new(r_times_ec_sk_2);
-    bn_new(ctx_alpha_times_beta_times_tau);
-    bn_new(ctx_k_2_times_e);
-    bn_new(ctx);
     bn_new(k_2_inverse);
     ec_new(R_1);
     ec_new(R_c);
     ec_new(R);
     ec_new(g_to_the_gamma);
+
     zk_proof_new(pi_1);
     zk_proof_new(pi_c);
     zk_proof_new(pi_gamma);
+    cl_ciphertext_new(ctx_alpha_times_beta_times_tau);
+    cl_ciphertext_new(ctx_k_2_times_e);
+    cl_ciphertext_new(ctx);
 
     // Deserialize the data from the message.
     ec_read_bin(R_1, data, RLC_EC_SIZE_COMPRESSED);
     ec_read_bin(pi_1->a, data + RLC_EC_SIZE_COMPRESSED, RLC_EC_SIZE_COMPRESSED);
     bn_read_bin(pi_1->z, data + (2 * RLC_EC_SIZE_COMPRESSED), RLC_BN_SIZE);
-    bn_read_bin(ctx_alpha_times_beta_times_tau, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_PAILLIER_CTX_SIZE);
+
+    char ctx_str[RLC_CL_CIPHERTEXT_SIZE];
+    memcpy(ctx_str, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    ctx_alpha_times_beta_times_tau->c1 = gp_read_str(ctx_str);
+    memzero(ctx_str, RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    ctx_alpha_times_beta_times_tau->c2 = gp_read_str(ctx_str);
 
     // Verify ZK proof.
     if (zk_dlog_verify(pi_1, R_1) != RLC_OK) {
@@ -667,12 +699,11 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_curve_get_ord(q);
 
     // Decrypt the ciphertext.
-    bn_write_bin(out, out_len, ctx_alpha_times_beta_times_tau);
-    if (cp_phpe_dec(out, in_len, out, out_len, state->keys->paillier_pk->pk, state->keys->paillier_sk->sk) != RLC_OK) {
+    GEN gamma;
+    if (cl_dec(&gamma, ctx_alpha_times_beta_times_tau, state->keys->cl_sk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
-    bn_read_bin(state->gamma, out, in_len);
-    bn_mod(state->gamma, state->gamma, q);
+    bn_read_str(state->gamma, GENtostr(gamma), strlen(GENtostr(gamma)), 10);
 
     // Compute the half ECDSA signature and ZK proofs.
     ec_mul_gen(g_to_the_gamma, state->gamma);
@@ -722,22 +753,30 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
     bn_mul(k_2_times_e, k_2_inverse, state->e_prime);
     bn_mod(k_2_times_e, k_2_times_e, q);
-    bn_write_bin(in, in_len, k_2_times_e);
-    if (cp_phpe_enc(out, &out_len, in, in_len, state->paillier_pk_alice->pk) != RLC_OK) {
+
+    const unsigned plain_str_len = bn_size_str(k_2_times_e, 10);
+    char plain_str[plain_str_len];
+    bn_write_str(plain_str, plain_str_len, k_2_times_e, 10);
+
+    GEN plain_k_2_times_e = strtoi(plain_str);
+    if (cl_enc(ctx_k_2_times_e, plain_k_2_times_e, state->cl_pk_alice, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
-    bn_read_bin(ctx_k_2_times_e, out, out_len);
 
-    bn_sqr(s, state->paillier_pk_alice->pk);
-    bn_mxp(ctx, state->ctx_ec_sk_alice, k_2_times_r_times_ec_sk_2, s);
-    bn_mod(ctx, ctx, s);
-    bn_mul(ctx, ctx, ctx_k_2_times_e);
-    bn_mod(ctx, ctx, s);
+    const unsigned v_str_len = bn_size_str(k_2_times_r_times_ec_sk_2, 10);
+    char v_str[v_str_len];
+    bn_write_str(v_str, v_str_len, k_2_times_r_times_ec_sk_2, 10);
+    GEN v = strtoi(v_str);
+
+    ctx->c1 = nupow(state->ctx_ec_sk_alice->c1, v, NULL);
+    ctx->c2 = nupow(state->ctx_ec_sk_alice->c2, v, NULL);
+    ctx->c1 = gmul(ctx_k_2_times_e->c1, ctx->c1);
+    ctx->c2 = gmul(ctx_k_2_times_e->c2, ctx->c2);
 
     // Build and define the message.
     char *msg_type = "payment_sign_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE) + RLC_PAILLIER_CTX_SIZE;
+    const unsigned msg_data_length = (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE);
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(payment_sign_done_msg, msg_type_length, msg_data_length);
 
@@ -752,7 +791,9 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_write_bin(payment_sign_done_msg->data + (5 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED, pi_gamma->a, 1);
     ec_write_bin(payment_sign_done_msg->data + (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED, pi_gamma->b, 1);
     bn_write_bin(payment_sign_done_msg->data + (7 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_BN_SIZE, pi_gamma->z);
-    bn_write_bin(payment_sign_done_msg->data + (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_PAILLIER_CTX_SIZE, ctx);
+    memcpy(payment_sign_done_msg->data + (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), GENtostr(ctx->c1), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(payment_sign_done_msg->data + (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, GENtostr(ctx->c2), 
+           RLC_CL_CIPHERTEXT_SIZE);
 
     memcpy(payment_sign_done_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, payment_sign_done_msg, msg_type_length, msg_data_length);
@@ -784,9 +825,6 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_free(k_2_times_e);
     bn_free(k_2_times_r_times_ec_sk_2);
     bn_free(r_times_ec_sk_2);
-    bn_free(ctx_k_2_times_e);
-    bn_free(ctx_alpha_times_beta_times_tau);
-    bn_free(ctx);
     ec_free(R_1);
     ec_free(R_c);
     ec_free(R);
@@ -794,6 +832,9 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     zk_proof_free(pi_1);
     zk_proof_free(pi_c);
     zk_proof_free(pi_gamma);
+    cl_ciphertext_free(ctx_alpha_times_beta_times_tau);
+    cl_ciphertext_free(ctx_k_2_times_e);
+    cl_ciphertext_free(ctx);
     if (payment_sign_done_msg != NULL) message_free(payment_sign_done_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
@@ -977,15 +1018,21 @@ int main(void)
   TRY {
     tumbler_state_new(state);
 
-    read_keys_from_file_tumbler(state->keys->ec_sk,
-                                state->ec_pk_tumbler_alice,
-                                state->ec_pk_tumbler_bob,
-                                state->keys->paillier_sk,
-                                state->keys->paillier_pk,
-                                state->paillier_pk_alice,
-                                state->paillier_pk_bob,
-                                state->ctx_ec_sk_alice,
-                                state->ctx_ec_sk_bob);
+    if (generate_cl_params(state->cl_params) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
+
+    if (read_keys_from_file_tumbler(state->keys->ec_sk,
+                                    state->ec_pk_tumbler_alice,
+                                    state->ec_pk_tumbler_bob,
+                                    state->keys->cl_sk,
+                                    state->keys->cl_pk,
+                                    state->cl_pk_alice,
+                                    state->cl_pk_bob,
+                                    state->ctx_ec_sk_alice,
+                                    state->ctx_ec_sk_bob) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
 
     while (1) {
       if (receive_message(state, socket) != RLC_OK) {

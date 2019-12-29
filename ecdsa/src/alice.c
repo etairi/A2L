@@ -2,6 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "relic/relic.h"
+#include "pari/pari.h"
 #include "zmq.h"
 #include "alice.h"
 #include "types.h"
@@ -104,7 +105,13 @@ int puzzle_share_handler(alice_state_t state, void *socket, uint8_t *data) {
   TRY {
     // Deserialize the data from the message.
     ec_read_bin(state->g_to_the_alpha_times_beta, data, RLC_EC_SIZE_COMPRESSED);
-    bn_read_bin(state->ctx_alpha_times_beta, data + RLC_EC_SIZE_COMPRESSED, RLC_PAILLIER_CTX_SIZE);
+
+    char ctx_str[RLC_CL_CIPHERTEXT_SIZE];
+    memcpy(ctx_str, data + RLC_EC_SIZE_COMPRESSED, RLC_CL_CIPHERTEXT_SIZE);
+    state->ctx_alpha_times_beta->c1 = gp_read_str(ctx_str);
+    memzero(ctx_str, RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + RLC_EC_SIZE_COMPRESSED + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    state->ctx_alpha_times_beta->c2 = gp_read_str(ctx_str);
 
     // Build and define the message.
     char *msg_type = "puzzle_share_done";
@@ -200,18 +207,18 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   message_null(payment_sign_msg);
 
   bn_t q, s;
-  bn_t ctx_alpha_times_beta_times_tau;
+  cl_ciphertext_t ctx_alpha_times_beta_times_tau;
   zk_proof_t pi_1;
 
   bn_null(q);
   bn_null(s);
-  bn_null(ctx_alpha_times_beta_times_tau);
+  cl_ciphertext_null(ctx_alpha_times_beta_times_tau);
   zk_proof_null(pi_1);
 
   TRY {
     bn_new(q);
     bn_new(s);
-    bn_new(ctx_alpha_times_beta_times_tau);
+    cl_ciphertext_new(ctx_alpha_times_beta_times_tau);
     zk_proof_new(pi_1);
 
     ec_curve_get_ord(q);
@@ -225,9 +232,13 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
 
     // Homomorphically randomize the challenge ciphertext.
     bn_rand_mod(state->tau, q);
-    bn_sqr(s, state->tumbler_paillier_pk->pk);
-		bn_mxp(ctx_alpha_times_beta_times_tau, state->ctx_alpha_times_beta, state->tau, s);
-		bn_mod(ctx_alpha_times_beta_times_tau, ctx_alpha_times_beta_times_tau, s);
+    const unsigned tau_str_len = bn_size_str(state->tau, 10);
+    char tau_str[tau_str_len];
+    bn_write_str(tau_str, tau_str_len, state->tau, 10);
+
+    GEN plain_tau = strtoi(tau_str);
+    ctx_alpha_times_beta_times_tau->c1 = nupow(state->ctx_alpha_times_beta->c1, plain_tau, NULL);
+    ctx_alpha_times_beta_times_tau->c2 = nupow(state->ctx_alpha_times_beta->c2, plain_tau, NULL);
 
     // Deserialize the data from the message.
     bn_read_bin(state->com->c, data, RLC_BN_SIZE);
@@ -236,7 +247,7 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     // Build and define the message.
     char *msg_type = "payment_sign";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + RLC_PAILLIER_CTX_SIZE;
+    const unsigned msg_data_length = (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE);
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(payment_sign_msg, msg_type_length, msg_data_length);
 
@@ -244,7 +255,10 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_write_bin(payment_sign_msg->data, RLC_EC_SIZE_COMPRESSED, state->R_1, 1);
     ec_write_bin(payment_sign_msg->data + RLC_EC_SIZE_COMPRESSED, RLC_EC_SIZE_COMPRESSED, pi_1->a, 1);
     bn_write_bin(payment_sign_msg->data + (2 * RLC_EC_SIZE_COMPRESSED), RLC_BN_SIZE, pi_1->z);
-    bn_write_bin(payment_sign_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_PAILLIER_CTX_SIZE, ctx_alpha_times_beta_times_tau);
+    memcpy(payment_sign_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE,
+           GENtostr(ctx_alpha_times_beta_times_tau->c1), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(payment_sign_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + RLC_CL_CIPHERTEXT_SIZE,
+           GENtostr(ctx_alpha_times_beta_times_tau->c2), RLC_CL_CIPHERTEXT_SIZE);
 
     // Serialize the message.
     memcpy(payment_sign_msg->type, msg_type, msg_type_length);
@@ -269,7 +283,7 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   } FINALLY {
     bn_free(q);
     bn_free(s);
-    bn_free(ctx_alpha_times_beta_times_tau);
+    cl_ciphertext_free(ctx_alpha_times_beta_times_tau);
     zk_proof_free(pi_1);
     if (payment_sign_msg != NULL) message_free(payment_sign_msg);
     if (serialized_message != NULL) free(serialized_message);
@@ -285,10 +299,6 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
 
   int result_status = RLC_OK;
 
-  uint8_t out[RLC_PAILLIER_CTX_SIZE];
-  int in_len = bn_size_bin(state->keys->paillier_pk->pk);
-  int out_len = RLC_PAILLIER_CTX_SIZE - 1;
-
   int tx_len = sizeof(tx);
   uint8_t *tx_msg = NULL;
   uint8_t hash[RLC_MD_LEN];
@@ -297,21 +307,22 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   message_t payment_end_msg;
   message_null(payment_end_msg);
 
-  bn_t q, e, r, x, ctx;
+  bn_t q, e, r, x;
   bn_t s_1, s_2, k_1_inverse;
   ec_t R_2, R_c, R, com_x, g_to_the_gamma;
   ec_t R_2_to_the_s_2, pk_to_the_r;
   ec_t A_prime_to_the_tau;
   ec_t g_to_the_e, pk_to_the_r_times_g_to_the_e;
+
   zk_proof_t pi_2;
   zk_proof_t pi_c;
   zk_proof_t pi_gamma;
+  cl_ciphertext_t ctx;
 
   bn_null(q);
   bn_null(e);
   bn_null(r);
   bn_null(x);
-  bn_null(ctx);
   bn_null(s_1);
   bn_null(s_2);
   bn_null(k_1_inverse);
@@ -325,16 +336,17 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   ec_null(R_c);
   ec_null(R);
   ec_null(com_x);
+
   zk_proof_null(pi_2);
   zk_proof_null(pi_c);
   zk_proof_null(pi_gamma);
+  cl_ciphertext_null(ctx);
 
   TRY {
     bn_new(q);
     bn_new(e);
     bn_new(r);
     bn_new(x);
-    bn_new(ctx);
     bn_new(s_1);
     bn_new(s_2);
     bn_new(k_1_inverse);
@@ -348,9 +360,11 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_new(R_c);
     ec_new(R);
     ec_new(com_x);
+
     zk_proof_new(pi_2);
     zk_proof_new(pi_c);
     zk_proof_new(pi_gamma);
+    cl_ciphertext_new(ctx);
 
     // Deserialize the data from the message.
     ec_read_bin(R_2, data, RLC_EC_SIZE_COMPRESSED);
@@ -363,7 +377,13 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_read_bin(pi_gamma->a, data + (5 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED);
     ec_read_bin(pi_gamma->b, data + (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED);
     bn_read_bin(pi_gamma->z, data + (7 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_BN_SIZE);
-    bn_read_bin(ctx, data + (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_PAILLIER_CTX_SIZE);
+
+    char ctx_str[RLC_CL_CIPHERTEXT_SIZE];
+    memcpy(ctx_str, data + (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_CL_CIPHERTEXT_SIZE);
+    ctx->c1 = gp_read_str(ctx_str);
+    memzero(ctx_str, RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    ctx->c2 = gp_read_str(ctx_str);
 
     // Verify the commitment and ZK proofs.
     ec_add(com_x, R_2, pi_2->a);
@@ -411,12 +431,11 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
 			bn_read_bin(e, tx_msg, tx_len);
 		}
 
-    bn_write_bin(out, out_len, ctx);
-    if (cp_phpe_dec(out, in_len, out, out_len, state->keys->paillier_pk->pk, state->keys->paillier_sk->sk) != RLC_OK) {
+    GEN plain_s_2;
+    if (cl_dec(&plain_s_2, ctx, state->keys->cl_sk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
-    bn_read_bin(s_2, out, in_len);
-    bn_mod(s_2, s_2, q);
+    bn_read_str(s_2, GENtostr(plain_s_2), strlen(GENtostr(plain_s_2)), 10);
 
     // Check correctness of the partial signature received.
     ec_mul(R_2_to_the_s_2, R_2, s_2);
@@ -474,7 +493,6 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     bn_free(e);
     bn_free(r);
     bn_free(x);
-    bn_free(ctx);
     bn_free(s_1);
     bn_free(s_2);
     bn_free(k_1_inverse);
@@ -491,6 +509,7 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     zk_proof_free(pi_2);
     zk_proof_free(pi_c);
     zk_proof_free(pi_gamma);
+    cl_ciphertext_free(ctx);
     if (payment_end_msg != NULL) message_free(payment_end_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
@@ -652,12 +671,18 @@ int main(void)
   TRY {
     alice_state_new(state);
 
-    read_keys_from_file_alice_bob(ALICE_KEY_FILE_PREFIX,
-                                  state->keys->ec_sk,
-                                  state->keys->ec_pk,
-                                  state->keys->paillier_sk,
-                                  state->keys->paillier_pk,
-                                  state->tumbler_paillier_pk);
+    if (generate_cl_params(state->cl_params) != RLC_OK) {
+      THROW(ERR_CAUGHT);
+    }
+
+    if (read_keys_from_file_alice_bob(ALICE_KEY_FILE_PREFIX,
+                                      state->keys->ec_sk,
+                                      state->keys->ec_pk,
+                                      state->keys->cl_sk,
+                                      state->keys->cl_pk,
+                                      state->tumbler_cl_pk) != RLC_OK) {
+        THROW(ERR_CAUGHT);
+    }
 
     while (!PUZZLE_SHARED) {
       if (receive_message(state, socket) != RLC_OK) {
@@ -684,7 +709,7 @@ int main(void)
       THROW(ERR_CAUGHT);
     }
 
-    start_time = timer();
+    start_time = ttimer();
     if (payment_init(socket) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
@@ -694,7 +719,8 @@ int main(void)
         THROW(ERR_CAUGHT);
       }
     }
-    stop_time = timer();
+
+    stop_time = ttimer();
     total_time = stop_time - start_time;
     printf("\nPayment procedure time: %.5f sec\n", total_time / CLOCK_PRECISION);
 

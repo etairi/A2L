@@ -2,6 +2,7 @@
 #define TRILERO_ECDSA_INCLUDE_TYPES
 
 #include "relic/relic.h"
+#include "pari/pari.h"
 
 typedef struct {
   char *type;
@@ -44,26 +45,54 @@ typedef struct {
 
 typedef zk_proof_st *zk_proof_t;
 
-#define zk_proof_null(zk_proof) zk_proof = NULL;
+#define zk_proof_null(proof) proof = NULL;
 
-#define zk_proof_new(zk_proof)                \
+#define zk_proof_new(proof)                   \
   do {                                        \
-    zk_proof = malloc(sizeof(zk_proof_st));   \
-    if (zk_proof == NULL) {                   \
+    proof = malloc(sizeof(zk_proof_st));      \
+    if (proof == NULL) {                      \
       THROW(ERR_NO_MEMORY);                   \
     }                                         \
-    ec_new((zk_proof)->a);                    \
-    ec_new((zk_proof)->b);                    \
-    bn_new((zk_proof)->z);                    \
+    ec_new((proof)->a);                       \
+    ec_new((proof)->b);                       \
+    bn_new((proof)->z);                       \
   } while (0)
 
-#define zk_proof_free(zk_proof)               \
+#define zk_proof_free(proof)                  \
   do {                                        \
-    ec_free((zk_proof)->a);                   \
-    ec_free((zk_proof)->b);                   \
-    bn_free((zk_proof)->z);                   \
-    free(zk_proof);                           \
-    zk_proof = NULL;                          \
+    ec_free((proof)->a);                      \
+    ec_free((proof)->b);                      \
+    bn_free((proof)->z);                      \
+    free(proof);                              \
+    proof = NULL;                             \
+  } while (0)
+
+typedef struct {
+  GEN t1;
+  ec_t t2;
+  GEN t3;
+  GEN u1;
+  GEN u2;
+} zk_proof_cldl_st;
+
+typedef zk_proof_cldl_st *zk_proof_cldl_t;
+
+#define zk_proof_cldl_null(proof) proof = NULL;
+
+#define zk_proof_cldl_new(proof)              \
+  do {                                        \
+    proof = malloc(sizeof(zk_proof_cldl_st)); \
+    if (proof == NULL) {                      \
+      THROW(ERR_NO_MEMORY);                   \
+    }                                         \
+    ec_new((proof)->t2);                      \
+  } while (0)
+
+#define zk_proof_cldl_free(proof)             \
+  do {                                        \
+    ec_free((proof)->t2);                     \
+    free(proof);                              \
+    proof = NULL;                             \
   } while (0)
 
 typedef struct {
@@ -91,6 +120,102 @@ typedef commit_st *commit_t;
     ec_free((commit)->r);                     \
     free(commit);                             \
     commit = NULL;                            \
+  } while (0)
+
+typedef struct {
+  GEN Delta_K;  // fundamental discriminant
+  GEN E;        // the secp256k1 elliptic curve
+  GEN q;        // the order of the elliptic curve
+  GEN G;        // the generator of the elliptic curve group
+  GEN g_q;      // the generator of G^q
+  GEN bound;    // the bound for exponentiation
+} cl_params_st;
+
+typedef cl_params_st *cl_params_t;
+
+#define cl_params_null(params) params = NULL;
+
+#define cl_params_new(params)                         \
+  do {                                                \
+    params = malloc(sizeof(cl_params_st));            \
+    if (params == NULL) {                             \
+      THROW(ERR_NO_MEMORY);                           \
+    }                                                 \
+  } while (0)
+
+#define cl_params_free(params)                        \
+  do {                                                \
+    free(params);                                     \
+    params = NULL;                                    \
+  } while (0)
+
+typedef struct {
+  GEN c1;
+  GEN c2;
+  GEN r;
+} cl_ciphertext_st;
+
+typedef cl_ciphertext_st *cl_ciphertext_t;
+
+#define cl_ciphertext_null(ciphertext) ciphertext = NULL;
+
+#define cl_ciphertext_new(ciphertext)                 \
+  do {                                                \
+    ciphertext = malloc(sizeof(cl_ciphertext_st));    \
+    if (ciphertext == NULL) {                         \
+      THROW(ERR_NO_MEMORY);                           \
+    }                                                 \
+  } while (0)
+
+#define cl_ciphertext_free(ciphertext)                \
+  do {                                                \
+    free(ciphertext);                                 \
+    ciphertext = NULL;                                \
+  } while (0)
+
+typedef struct {
+  GEN sk;
+} cl_secret_key_st;
+
+typedef cl_secret_key_st *cl_secret_key_t;
+
+#define cl_secret_key_null(secret_key) secret_key = NULL;
+
+#define cl_secret_key_new(secret_key)                 \
+  do {                                                \
+    secret_key = malloc(sizeof(cl_secret_key_st));    \
+    if (secret_key == NULL) {                         \
+      THROW(ERR_NO_MEMORY);                           \
+    }                                                 \
+  } while (0)
+
+#define cl_secret_key_free(secret_key)                \
+  do {                                                \
+    free(secret_key);                                 \
+    secret_key = NULL;                                \
+  } while (0)
+
+
+typedef struct {
+  GEN pk;
+} cl_public_key_st;
+
+typedef cl_public_key_st *cl_public_key_t;
+
+#define cl_public_key_null(public_key) public_key = NULL;
+
+#define cl_public_key_new(public_key)                 \
+  do {                                                \
+    public_key = malloc(sizeof(cl_public_key_st));    \
+    if (public_key == NULL) {                         \
+      THROW(ERR_NO_MEMORY);                           \
+    }                                                 \
+  } while (0)
+
+#define cl_public_key_free(public_key)                \
+  do {                                                \
+    free(public_key);                                 \
+    public_key = NULL;                                \
   } while (0)
 
 typedef struct {
@@ -142,56 +267,8 @@ typedef ec_public_key_st *ec_public_key_t;
   } while (0)
 
 typedef struct {
-  bn_t sk;
-} paillier_secret_key_st;
-
-typedef paillier_secret_key_st *paillier_secret_key_t;
-
-#define paillier_secret_key_null(secret_key) secret_key = NULL;
-
-#define paillier_secret_key_new(secret_key)                     \
-  do {                                                          \
-    secret_key = malloc(sizeof(paillier_secret_key_st));        \
-    if (secret_key == NULL) {                                   \
-      THROW(ERR_NO_MEMORY);                                     \
-    }                                                           \
-    bn_new((secret_key)->sk);                                   \
-  } while (0)
-
-#define paillier_secret_key_free(secret_key)                    \
-  do {                                                          \
-    bn_free((secret_key)->sk);                                  \
-    free(secret_key);                                           \
-    secret_key = NULL;                                          \
-  } while (0)
-
-typedef struct {
-  bn_t pk;
-} paillier_public_key_st;
-
-typedef paillier_public_key_st *paillier_public_key_t;
-
-#define paillier_public_key_null(public_key) public_key = NULL;
-
-#define paillier_public_key_new(public_key)                     \
-  do {                                                          \
-    public_key = malloc(sizeof(paillier_public_key_st));        \
-    if (public_key == NULL) {                                   \
-      THROW(ERR_NO_MEMORY);                                     \
-    }                                                           \
-    bn_new((public_key)->pk);                                   \
-  } while (0)
-
-#define paillier_public_key_free(public_key)                    \
-  do {                                                          \
-    bn_free((public_key)->pk);                                  \
-    free(public_key);                                           \
-    public_key = NULL;                                          \
-  } while (0)
-
-typedef struct {
-  paillier_public_key_t paillier_pk;
-  paillier_secret_key_t paillier_sk;
+  cl_public_key_t cl_pk;
+  cl_secret_key_t cl_sk;
   ec_public_key_t ec_pk;
   ec_secret_key_t ec_sk;
 } keys_st;
@@ -206,16 +283,16 @@ typedef keys_st *keys_t;
     if (keys == NULL) {                             \
       THROW(ERR_NO_MEMORY);                         \
     }                                               \
-    paillier_public_key_new((keys)->paillier_pk);   \
-    paillier_secret_key_new((keys)->paillier_sk);   \
+    cl_public_key_new((keys)->cl_pk);               \
+    cl_secret_key_new((keys)->cl_sk);               \
     ec_public_key_new((keys)->ec_pk);               \
     ec_secret_key_new((keys)->ec_sk);               \
   } while (0)
 
 #define keys_free(keys)                             \
   do {                                              \
-    paillier_public_key_free((keys)->paillier_pk);  \
-    paillier_secret_key_free((keys)->paillier_sk);  \
+    cl_public_key_free((keys)->cl_pk);              \
+    cl_secret_key_free((keys)->cl_sk);              \
     ec_public_key_free((keys)->ec_pk);              \
     ec_secret_key_free((keys)->ec_sk);              \
     free(keys);                                     \

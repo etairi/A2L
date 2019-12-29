@@ -40,13 +40,14 @@ typedef struct {
   keys_t keys;
   ec_public_key_t ec_pk_tumbler_alice;
   ec_public_key_t ec_pk_tumbler_bob;
-  paillier_public_key_t paillier_pk_alice;
-  paillier_public_key_t paillier_pk_bob;
-  bn_t ctx_ec_sk_alice;
-  bn_t ctx_ec_sk_bob;
+  cl_params_t cl_params;
+  cl_public_key_t cl_pk_alice;
+  cl_public_key_t cl_pk_bob;
+  cl_ciphertext_t ctx_ec_sk_alice;
+  cl_ciphertext_t ctx_ec_sk_bob;
   bn_t alpha;
   ec_t g_to_the_alpha;
-  bn_t ctx_alpha;
+  cl_ciphertext_t ctx_alpha;
   bn_t k_2_prime;
   ec_t R_2_prime;
   ec_t R_1_prime;
@@ -74,13 +75,14 @@ typedef tumbler_state_st *tumbler_state_t;
     keys_new((state)->keys);                              \
     ec_public_key_new((state)->ec_pk_tumbler_alice);      \
     ec_public_key_new((state)->ec_pk_tumbler_bob);        \
-    paillier_public_key_new((state)->paillier_pk_alice);  \
-    paillier_public_key_new((state)->paillier_pk_bob);    \
-    bn_new((state)->ctx_ec_sk_alice);                     \
-    bn_new((state)->ctx_ec_sk_bob);                       \
+    cl_params_new((state)->cl_params);                    \
+    cl_public_key_new((state)->cl_pk_alice);              \
+    cl_public_key_new((state)->cl_pk_bob);                \
+    cl_ciphertext_new((state)->ctx_ec_sk_alice);          \
+    cl_ciphertext_new((state)->ctx_ec_sk_bob);            \
     bn_new((state)->alpha);                               \
     ec_new((state)->g_to_the_alpha);                      \
-    bn_new((state)->ctx_alpha);                           \
+    cl_ciphertext_new((state)->ctx_alpha);                \
     bn_new((state)->k_2_prime);                           \
     ec_new((state)->R_2_prime);                           \
     ec_new((state)->R_1_prime);                           \
@@ -100,13 +102,14 @@ typedef tumbler_state_st *tumbler_state_t;
     keys_free((state)->keys);                             \
     ec_public_key_free((state)->ec_pk_tumbler_alice);     \
     ec_public_key_free((state)->ec_pk_tumbler_bob);       \
-    paillier_public_key_free((state)->paillier_pk_alice); \
-    paillier_public_key_free((state)->paillier_pk_bob);   \
-    bn_free((state)->ctx_ec_sk_alice);                    \
-    bn_free((state)->ctx_ec_sk_bob);                      \
+    cl_params_free((state)->cl_params);                   \
+    cl_public_key_free((state)->cl_pk_alice);             \
+    cl_public_key_free((state)->cl_pk_bob);               \
+    cl_ciphertext_free((state)->ctx_ec_sk_alice);         \
+    cl_ciphertext_free((state)->ctx_ec_sk_bob);           \
     bn_free((state)->alpha);                              \
     ec_free((state)->g_to_the_alpha);                     \
-    bn_free((state)->ctx_alpha);                          \
+    cl_ciphertext_free((state)->ctx_alpha);               \
     bn_free((state)->k_2_prime);                          \
     ec_free((state)->R_2_prime);                          \
     ec_free((state)->R_1_prime);                          \
