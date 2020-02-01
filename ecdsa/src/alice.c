@@ -676,10 +676,7 @@ int main(void)
     }
 
     if (read_keys_from_file_alice_bob(ALICE_KEY_FILE_PREFIX,
-                                      state->keys->ec_sk,
-                                      state->keys->ec_pk,
-                                      state->keys->cl_sk,
-                                      state->keys->cl_pk,
+                                      state->keys,
                                       state->tumbler_cl_pk) != RLC_OK) {
         THROW(ERR_CAUGHT);
     }

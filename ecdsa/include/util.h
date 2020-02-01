@@ -39,16 +39,10 @@ void deserialize_message(message_t *deserialized_message, const uint8_t *seriali
 
 int generate_keys_and_write_to_file(const cl_params_t params);
 int read_keys_from_file_alice_bob(const char *name,
-																	ec_secret_key_t ec_secret_key,
-																	ec_public_key_t ec_public_key,
-																	cl_secret_key_t cl_secret_key,
-																	cl_public_key_t cl_public_key,
+																	keys_t keys,
 																	cl_public_key_t tumbler_cl_public_key);
-int read_keys_from_file_tumbler(ec_secret_key_t ec_secret_key,
-																ec_public_key_t ec_public_key_alice_tumbler,
-																ec_public_key_t ec_public_key_bob_tumbler,
-																cl_secret_key_t cl_secret_key,
-																cl_public_key_t cl_public_key_tumbler,
+int read_keys_from_file_tumbler(keys_t keys_alice,
+																keys_t keys_bob,
 																cl_public_key_t cl_public_key_alice,
 																cl_public_key_t cl_public_key_bob,
 																cl_ciphertext_t cl_ctx_ec_sk_alice,

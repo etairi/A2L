@@ -431,15 +431,8 @@ int promise_end_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     THROW(ERR_NO_VALID);
   }
 
-  int result_status = RLC_OK;
-
-  TRY {
-    PROMISE_COMPLETED = 1;
-  } CATCH_ANY {
-    result_status = RLC_ERR;
-  }
-
-  return result_status;
+  PROMISE_COMPLETED = 1;
+  return RLC_OK;
 }
 
 int puzzle_share(bob_state_t state, void *socket) {
@@ -455,18 +448,16 @@ int puzzle_share(bob_state_t state, void *socket) {
   message_null(puzzle_share_msg);
 
   cl_ciphertext_t ctx_alpha_times_beta;
-  bn_t q, ctx_beta;
+  bn_t q;
   ec_t g_to_the_alpha_times_beta;
 
   cl_ciphertext_null(ctx_alpha_times_beta);
   bn_null(q);
-  bn_null(ctx_beta);
   ec_null(g_to_the_alpha_times_beta);
 
   TRY {
     cl_ciphertext_new(ctx_alpha_times_beta);
     bn_new(q);
-    bn_new(ctx_beta);
     ec_new(g_to_the_alpha_times_beta);
 
     ec_curve_get_ord(q);
@@ -520,7 +511,6 @@ int puzzle_share(bob_state_t state, void *socket) {
   } FINALLY {
     cl_ciphertext_free(ctx_alpha_times_beta);
     bn_free(q);
-    bn_free(ctx_beta);
     ec_free(g_to_the_alpha_times_beta);
     if (puzzle_share_msg != NULL) message_free(puzzle_share_msg);
     if (serialized_message != NULL) free(serialized_message);
@@ -534,15 +524,8 @@ int puzzle_share_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     THROW(ERR_NO_VALID);
   }
 
-  int result_status = RLC_OK;
-
-  TRY {
-    PUZZLE_SHARED = 1;
-  } CATCH_ANY {
-    result_status = RLC_ERR;
-  }
-
-  return result_status;
+  PUZZLE_SHARED = 1;
+  return RLC_OK;
 }
 
 int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data) {
@@ -690,10 +673,7 @@ int main(void)
     }
 
     if (read_keys_from_file_alice_bob(BOB_KEY_FILE_PREFIX,
-                                      state->keys->ec_sk,
-                                      state->keys->ec_pk,
-                                      state->keys->cl_sk,
-                                      state->keys->cl_pk,
+                                      state->keys,
                                       state->tumbler_cl_pk) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }

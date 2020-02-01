@@ -207,18 +207,16 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   message_null(payment_sign_msg);
 
   cl_ciphertext_t ctx_alpha_times_beta_times_tau;
-  bn_t q, ctx_tau;
+  bn_t q;
   zk_proof_t pi_1;
 
   cl_ciphertext_null(ctx_alpha_times_beta_times_tau);
   bn_null(q);
-  bn_null(ctx_tau);
   zk_proof_null(pi_1);
 
   TRY {
     cl_ciphertext_new(ctx_alpha_times_beta_times_tau);
     bn_new(q);
-    bn_new(ctx_tau);
     zk_proof_new(pi_1);
 
     ec_curve_get_ord(q);
@@ -283,7 +281,6 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   } FINALLY {
     cl_ciphertext_free(ctx_alpha_times_beta_times_tau);
     bn_free(q);
-    bn_free(ctx_tau);
     zk_proof_free(pi_1);
     if (payment_sign_msg != NULL) message_free(payment_sign_msg);
     if (serialized_message != NULL) free(serialized_message);
@@ -622,10 +619,7 @@ int main(void)
     alice_state_new(state);
 
     if (read_keys_from_file_alice_bob(ALICE_KEY_FILE_PREFIX,
-                                      state->keys->ec_sk,
-                                      state->keys->ec_pk,
-                                      state->keys->cl_sk,
-                                      state->keys->cl_pk,
+                                      state->keys,
                                       state->tumbler_cl_pk) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }

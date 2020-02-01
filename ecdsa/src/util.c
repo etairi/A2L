@@ -290,10 +290,7 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 }
 
 int read_keys_from_file_alice_bob(const char *name,
-																	ec_secret_key_t ec_secret_key,
-																	ec_public_key_t ec_public_key,
-																	cl_secret_key_t cl_secret_key,
-																	cl_public_key_t cl_public_key,
+																	keys_t keys,
 																	cl_public_key_t tumbler_cl_public_key) {
 	int result_status = RLC_OK;
 
@@ -320,23 +317,23 @@ int read_keys_from_file_alice_bob(const char *name,
 		if (fread(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		bn_read_bin(ec_secret_key->sk, serialized_ec_sk, RLC_BN_SIZE);
+		bn_read_bin(keys->ec_sk->sk, serialized_ec_sk, RLC_BN_SIZE);
 
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
 			THROW(ERR_NO_READ);
 		}
-		ec_read_bin(ec_public_key->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+		ec_read_bin(keys->ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 
 		if (fread(serialized_cl_sk, sizeof(char), RLC_CL_SECRET_KEY_SIZE, file) != RLC_CL_SECRET_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		cl_secret_key->sk = gp_read_str(serialized_cl_sk);
+		keys->cl_sk->sk = gp_read_str(serialized_cl_sk);
 		
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		cl_public_key->pk = gp_read_str(serialized_cl_pk);
+		keys->cl_pk->pk = gp_read_str(serialized_cl_pk);
 		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
 
 		fclose(file);
@@ -371,11 +368,8 @@ int read_keys_from_file_alice_bob(const char *name,
 	return result_status;
 }
 
-int read_keys_from_file_tumbler(ec_secret_key_t ec_secret_key,
-																ec_public_key_t ec_public_key_alice_tumbler,
-																ec_public_key_t ec_public_key_bob_tumbler,
-																cl_secret_key_t cl_secret_key,
-																cl_public_key_t cl_public_key,
+int read_keys_from_file_tumbler(keys_t keys_alice,
+																keys_t keys_bob,
 																cl_public_key_t cl_public_key_alice,
 																cl_public_key_t cl_public_key_bob,
 																cl_ciphertext_t cl_ctx_ec_sk_alice,
@@ -406,28 +400,31 @@ int read_keys_from_file_tumbler(ec_secret_key_t ec_secret_key,
 		if (fread(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		bn_read_bin(ec_secret_key->sk, serialized_ec_sk, RLC_BN_SIZE);
+		bn_read_bin(keys_alice->ec_sk->sk, serialized_ec_sk, RLC_BN_SIZE);
+		bn_read_bin(keys_bob->ec_sk->sk, serialized_ec_sk, RLC_BN_SIZE);
 
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
 			THROW(ERR_NO_READ);
 		}
-		ec_read_bin(ec_public_key_alice_tumbler->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+		ec_read_bin(keys_alice->ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
 			THROW(ERR_NO_READ);
 		}
-		ec_read_bin(ec_public_key_bob_tumbler->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+		ec_read_bin(keys_bob->ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 		if (fread(serialized_cl_sk, sizeof(char), RLC_CL_SECRET_KEY_SIZE, file) != RLC_CL_SECRET_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		cl_secret_key->sk = gp_read_str(serialized_cl_sk);
+		keys_alice->cl_sk->sk = gp_read_str(serialized_cl_sk);
+		keys_bob->cl_sk->sk = gp_read_str(serialized_cl_sk);
 		
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
 			THROW(ERR_NO_READ);
 		}
-		cl_public_key->pk = gp_read_str(serialized_cl_pk);
+		keys_alice->cl_pk->pk = gp_read_str(serialized_cl_pk);
+		keys_bob->cl_pk->pk = gp_read_str(serialized_cl_pk);
 		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
 
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {

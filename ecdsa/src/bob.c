@@ -453,15 +453,8 @@ int promise_end_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     THROW(ERR_NO_VALID);
   }
 
-  int result_status = RLC_OK;
-
-  TRY {
-    PROMISE_COMPLETED = 1;
-  } CATCH_ANY {
-    result_status = RLC_ERR;
-  }
-
-  return result_status;
+  PROMISE_COMPLETED = 1;
+  return RLC_OK;
 }
 
 int puzzle_share(bob_state_t state, void *socket) {
@@ -556,15 +549,8 @@ int puzzle_share_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     THROW(ERR_NO_VALID);
   }
 
-  int result_status = RLC_OK;
-
-  TRY {
-    PUZZLE_SHARED = 1;
-  } CATCH_ANY {
-    result_status = RLC_ERR;
-  }
-
-  return result_status;
+  PUZZLE_SHARED = 1;
+  return RLC_OK;
 }
 
 int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data) {
@@ -736,10 +722,7 @@ int main(void)
     }
 
     if (read_keys_from_file_alice_bob(BOB_KEY_FILE_PREFIX,
-                                      state->keys->ec_sk,
-                                      state->keys->ec_pk,
-                                      state->keys->cl_sk,
-                                      state->keys->cl_pk,
+                                      state->keys,
                                       state->tumbler_cl_pk) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }

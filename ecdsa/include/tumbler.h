@@ -37,9 +37,8 @@ static symstruct_t msg_lookuptable[] = {
 #define TOTAL_MESSAGES (sizeof(msg_lookuptable) / sizeof(symstruct_t))
 
 typedef struct {
-  keys_t keys;
-  ec_public_key_t ec_pk_tumbler_alice;
-  ec_public_key_t ec_pk_tumbler_bob;
+  keys_t keys_alice;
+  keys_t keys_bob;
   cl_params_t cl_params;
   cl_public_key_t cl_pk_alice;
   cl_public_key_t cl_pk_bob;
@@ -72,9 +71,8 @@ typedef tumbler_state_st *tumbler_state_t;
     if (state == NULL) {                                  \
       THROW(ERR_NO_MEMORY);                               \
     }                                                     \
-    keys_new((state)->keys);                              \
-    ec_public_key_new((state)->ec_pk_tumbler_alice);      \
-    ec_public_key_new((state)->ec_pk_tumbler_bob);        \
+    keys_new((state)->keys_alice);                        \
+    keys_new((state)->keys_bob);                          \
     cl_params_new((state)->cl_params);                    \
     cl_public_key_new((state)->cl_pk_alice);              \
     cl_public_key_new((state)->cl_pk_bob);                \
@@ -99,9 +97,8 @@ typedef tumbler_state_st *tumbler_state_t;
 
 #define tumbler_state_free(state)                         \
   do {                                                    \
-    keys_free((state)->keys);                             \
-    ec_public_key_free((state)->ec_pk_tumbler_alice);     \
-    ec_public_key_free((state)->ec_pk_tumbler_bob);       \
+    keys_free((state)->keys_alice);                       \
+    keys_free((state)->keys_bob);                         \
     cl_params_free((state)->cl_params);                   \
     cl_public_key_free((state)->cl_pk_alice);             \
     cl_public_key_free((state)->cl_pk_bob);               \

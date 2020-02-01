@@ -140,11 +140,11 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_write_str(alpha_str, alpha_str_len, state->alpha, 10);
 
     GEN plain_alpha = strtoi(alpha_str);
-    if (cl_enc(state->ctx_alpha, plain_alpha, state->keys->cl_pk, state->cl_params) != RLC_OK) {
+    if (cl_enc(state->ctx_alpha, plain_alpha, state->keys_bob->cl_pk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
 
-    if (zk_cldl_prove(pi_cldl, plain_alpha, state->ctx_alpha, state->keys->cl_pk, state->cl_params) != RLC_OK) {
+    if (zk_cldl_prove(pi_cldl, plain_alpha, state->ctx_alpha, state->keys_bob->cl_pk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
 
@@ -281,7 +281,7 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
 		bn_mod(state->e_prime, state->e_prime, q);
 
-		bn_mul(s_2_prime, state->keys->ec_sk->sk, state->e_prime);
+		bn_mul(s_2_prime, state->keys_bob->ec_sk->sk, state->e_prime);
 		bn_mod(s_2_prime, s_2_prime, q);
 		bn_sub(s_2_prime, q, s_2_prime);
 		bn_add(s_2_prime, s_2_prime, state->k_2_prime);
@@ -373,7 +373,7 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Check correctness of the "almost" signature received.
     ec_mul_gen(g_to_the_s_prime, s_prime);
     bn_neg(neg_e_prime, state->e_prime);
-    ec_mul(pk_to_the_neg_e_prime, state->ec_pk_tumbler_bob->pk, neg_e_prime);
+    ec_mul(pk_to_the_neg_e_prime, state->keys_bob->ec_pk->pk, neg_e_prime);
     ec_add(R_1_prime_times_R_2_prime, state->R_1_prime, state->R_2_prime);
     ec_add(R_1_prime_times_R_2_prime_times_pk, R_1_prime_times_R_2_prime, pk_to_the_neg_e_prime);
     
@@ -561,7 +561,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
     // Decrypt the ciphertext.
     GEN gamma;
-    if (cl_dec(&gamma, ctx_alpha_times_beta_times_tau, state->keys->cl_sk, state->cl_params) != RLC_OK) {
+    if (cl_dec(&gamma, ctx_alpha_times_beta_times_tau, state->keys_alice->cl_sk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
     bn_read_str(state->gamma, GENtostr(gamma), strlen(GENtostr(gamma)), 10);
@@ -594,7 +594,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
 		bn_mod(state->e, state->e, q);
 
-		bn_mul(s_2, state->keys->ec_sk->sk, state->e);
+		bn_mul(s_2, state->keys_alice->ec_sk->sk, state->e);
 		bn_mod(s_2, s_2, q);
 		bn_sub(s_2, q, s_2);
 		bn_add(s_2, s_2, state->k_2);
@@ -696,7 +696,7 @@ int payment_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Verify the completed signature.
     if (bn_sign(state->e) == RLC_POS && bn_sign(state->s) == RLC_POS && !bn_is_zero(state->s)) {
 			if (bn_cmp(state->e, q) == RLC_LT && bn_cmp(state->s, q) == RLC_LT) {
-				ec_mul_sim_gen(p, state->s, state->ec_pk_tumbler_alice->pk, state->e);
+				ec_mul_sim_gen(p, state->s, state->keys_alice->ec_pk->pk, state->e);
 				ec_get_x(rv, p);
 
 				bn_mod(rv, rv, q);
@@ -806,11 +806,8 @@ int main(void)
       THROW(ERR_CAUGHT);
     }
 
-    if (read_keys_from_file_tumbler(state->keys->ec_sk,
-                                    state->ec_pk_tumbler_alice,
-                                    state->ec_pk_tumbler_bob,
-                                    state->keys->cl_sk,
-                                    state->keys->cl_pk,
+    if (read_keys_from_file_tumbler(state->keys_alice,
+                                    state->keys_bob,
                                     state->cl_pk_alice,
                                     state->cl_pk_bob) != RLC_OK) {
       THROW(ERR_CAUGHT);
