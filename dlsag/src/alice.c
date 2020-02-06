@@ -226,10 +226,6 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     bn_read_bin(state->com->c, data, RLC_BN_SIZE);
     ec_read_bin(state->com->r, data + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
 
-    for (size_t i = 1; i < RING_SIZE; i++) {
-      bn_read_bin(state->vec_s[i], data + RLC_EC_SIZE_COMPRESSED + (i * RLC_BN_SIZE), RLC_BN_SIZE);
-    }
-
     // Homomorphically randomize the challenge ciphertext.
     ec_curve_get_ord(q);
     bn_rand_mod(state->tau, q);
@@ -321,12 +317,16 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   message_null(payment_end_msg);
 
   bn_t s0_T, h0, h_i;
-  ec_t L_i, R_i, R, R_T, J_T, J_T_tilde;
+  ec_t L_i, R_i, R, R_T, R_A_times_R_T; 
+  ec_t R_A_times_R_T_over_pk, J_T, J_T_tilde;
   ec_t J_T_J_A_tilde_A_star;
   ec_t J_to_the_h_i_minus_1;
   ec_t pk_i_to_the_s_i_times_m_i;
   ec_t pk_i_to_the_h_i;
   ec_t pk_to_the_m;
+  ec_t pk_to_the_hn_minus_1;
+  ec_t g_to_the_s0_A, g_to_the_s0_T;
+  ec_t g_to_the_s0_A_times_s0_T;
   ec_t A_prime_to_the_tau;
   ec_t A_pprime, A_star_pprime;
   zk_proof_t pi_A, pi_T;
@@ -341,6 +341,8 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   ec_null(R_i);
   ec_null(R);
   ec_null(R_T);
+  ec_null(R_A_times_R_T);
+  ec_null(R_A_times_R_T_over_pk);
   ec_null(J_T);
   ec_null(J_T_tilde);
   ec_null(J_T_J_A_tilde_A_star);
@@ -348,6 +350,10 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   ec_null(pk_i_to_the_s_i_times_m_i);
   ec_null(pk_i_to_the_h_i);
   ec_null(pk_to_the_m);
+  ec_null(pk_to_the_hn_minus_1);
+  ec_null(g_to_the_s0_A);
+  ec_null(g_to_the_s0_T);
+  ec_null(g_to_the_s0_A_times_s0_T);
   ec_null(A_prime_to_the_tau);
   ec_null(A_pprime);
   ec_null(A_star_pprime);
@@ -368,6 +374,8 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_new(R_i);
     ec_new(R);
     ec_new(R_T);
+    ec_new(R_A_times_R_T);
+    ec_new(R_A_times_R_T_over_pk);
     ec_new(J_T);
     ec_new(J_T_tilde);
     ec_new(J_T_J_A_tilde_A_star);
@@ -375,6 +383,10 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_new(pk_i_to_the_s_i_times_m_i);
     ec_new(pk_i_to_the_h_i);
     ec_new(pk_to_the_m);
+    ec_new(pk_to_the_hn_minus_1);
+    ec_new(g_to_the_s0_A);
+    ec_new(g_to_the_s0_T);
+    ec_new(g_to_the_s0_A_times_s0_T);
     ec_new(A_prime_to_the_tau);
     ec_new(A_pprime);
     ec_new(A_star_pprime);
@@ -402,11 +414,19 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_read_bin(pi_A->b, data + (8 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED);
     bn_read_bin(pi_A->z, data + (9 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_BN_SIZE);
 
+    for (size_t i = 1; i < RING_SIZE; i++) {
+      bn_read_bin(state->vec_s[i], data + (9 * RLC_EC_SIZE_COMPRESSED) + ((i + 4) * RLC_BN_SIZE), RLC_BN_SIZE);
+    }
+
     // Verify the commitment and ZK proofs.
     ec_add(com_x, R_T, J_T_tilde);
+    ec_add(com_x, com_x, J_T);
     ec_add(com_x, com_x, pi_T->a);
     ec_add(com_x, com_x, pi_T->b);
     ec_norm(com_x, com_x);
+    for (size_t i = 1; i < RING_SIZE; i++) {
+      ec_mul(com_x, com_x, state->vec_s[i]);
+    }
     if (decommit(state->com, com_x) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
@@ -429,8 +449,9 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     }
 
     // Compute the half DLSAG signature.
-    ec_add(R, R_T, state->R_A);
-    ec_add(R, R, A_pprime);
+    ec_add(R_A_times_R_T, state->R_A, R_T);
+    ec_norm(R_A_times_R_T, R_A_times_R_T);
+    ec_add(R, R_A_times_R_T, A_pprime);
     ec_norm(R, R);
 
     ec_add(J_T_J_A_tilde_A_star, J_T_tilde, state->J_A_tilde);
@@ -502,9 +523,18 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     bn_mul(state->s0_A, h_i, state->keys->ec_sk1->sk);
     bn_sub(state->s0_A, state->vec_s[0], state->s0_A);
     bn_mod(state->s0_A, state->s0_A, q);
+    
+    // Check correctness of the partial signature received.
+    ec_mul_gen(g_to_the_s0_A, state->s0_A);
+    ec_mul_gen(g_to_the_s0_T, s0_T);
+    ec_add(g_to_the_s0_A_times_s0_T, g_to_the_s0_A, g_to_the_s0_T);
+    ec_norm(g_to_the_s0_A_times_s0_T, g_to_the_s0_A_times_s0_T);
 
-    // TODO: Check correctness of the partial signature received.
-    if (bn_cmp(h0, state->h0) != RLC_EQ) {
+    ec_mul(pk_to_the_hn_minus_1, state->keys->ec_pk1->pk, h_i);
+    ec_sub(R_A_times_R_T_over_pk, R_A_times_R_T, pk_to_the_hn_minus_1);
+    ec_norm(R_A_times_R_T_over_pk, R_A_times_R_T_over_pk);
+
+    if (ec_cmp(g_to_the_s0_A_times_s0_T, R_A_times_R_T_over_pk) != RLC_EQ) {
       THROW(ERR_CAUGHT);
     }
 
@@ -550,6 +580,8 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_free(R_i);
     ec_free(R);
     ec_free(R_T);
+    ec_free(R_A_times_R_T);
+    ec_free(R_A_times_R_T_over_pk);
     ec_free(J_T);
     ec_free(J_T_tilde);
     ec_free(J_T_J_A_tilde_A_star);
@@ -557,6 +589,10 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_free(pk_i_to_the_s_i_times_m_i);
     ec_free(pk_i_to_the_h_i);
     ec_free(pk_to_the_m);
+    ec_free(pk_to_the_hn_minus_1);
+    ec_free(g_to_the_s0_A);
+    ec_free(g_to_the_s0_T);
+    ec_free(g_to_the_s0_A_times_s0_T);
     ec_free(A_prime_to_the_tau);
     ec_free(A_pprime);
     ec_free(A_star_pprime);

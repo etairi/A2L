@@ -203,11 +203,6 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     bn_read_bin(pi_A->z, data + (6 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE)
                 + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE + RLC_CLDL_PROOF_U2_SIZE, RLC_BN_SIZE);
 
-    for (size_t i = 1; i < RING_SIZE; i++) {
-      bn_read_bin(state->vec_s[i], data + (6 * RLC_EC_SIZE_COMPRESSED) + ((i + 1) * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
-                + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE + RLC_CLDL_PROOF_U2_SIZE, RLC_BN_SIZE);
-    }
-
     // Verify ZK proof.
     if (zk_cldl_verify(pi_cldl, state->A, state->ctx_alpha, state->tumbler_cl_pk, state->cl_params) != RLC_OK) {
       THROW(ERR_CAUGHT);
@@ -291,12 +286,15 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   message_t promise_end_msg;
 
   bn_t s0_T, h0, h_i;
-  ec_t L_i, R_i, R, R_T, J_T, J_T_tilde;
-  ec_t J_T_J_B_tilde_A_star;
+  ec_t L_i, R_i, R_B_times_R_T, R, R_T;
+  ec_t pk_to_the_hn_minus_1, R_B_times_R_T_over_pk;
+  ec_t J_T, J_T_tilde, J_T_J_B_tilde_A_star;
   ec_t J_to_the_h_i_minus_1;
   ec_t pk_i_to_the_s_i_times_m_i;
   ec_t pk_i_to_the_h_i;
   ec_t pk_to_the_m;
+  ec_t g_to_the_s0_B, g_to_the_s0_T;
+  ec_t g_to_the_s0_B_times_s0_T;
   zk_proof_t pi_T;
 
   bn_t q, r, x;
@@ -307,6 +305,9 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   bn_null(h_i);
   ec_null(L_i);
   ec_null(R_i);
+  ec_null(R_B_times_R_T);
+  ec_null(pk_to_the_hn_minus_1);
+  ec_null(R_B_times_R_T_over_pk);
   ec_null(R);
   ec_null(R_T);
   ec_null(J_T);
@@ -316,6 +317,9 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   ec_null(pk_i_to_the_s_i_times_m_i);
   ec_null(pk_i_to_the_h_i);
   ec_null(pk_to_the_m);
+  ec_null(g_to_the_s0_B);
+  ec_null(g_to_the_s0_T);
+  ec_null(g_to_the_s0_B_times_s0_T);
   zk_proof_null(pi_T);
 
   bn_null(q);
@@ -330,6 +334,9 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     bn_new(h_i);
     ec_new(L_i);
     ec_new(R_i);
+    ec_new(R_B_times_R_T);
+    ec_new(pk_to_the_hn_minus_1);
+    ec_new(R_B_times_R_T_over_pk);
     ec_new(R);
     ec_new(R_T);
     ec_new(J_T);
@@ -339,6 +346,9 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_new(pk_i_to_the_s_i_times_m_i);
     ec_new(pk_i_to_the_h_i);
     ec_new(pk_to_the_m);
+    ec_new(g_to_the_s0_B);
+    ec_new(g_to_the_s0_T);
+    ec_new(g_to_the_s0_B_times_s0_T);
     zk_proof_new(pi_T);
 
     bn_new(q);
@@ -355,13 +365,20 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_read_bin(pi_T->b, data + (4 * RLC_EC_SIZE_COMPRESSED), RLC_EC_SIZE_COMPRESSED);
     bn_read_bin(pi_T->z, data + (5 * RLC_EC_SIZE_COMPRESSED), RLC_BN_SIZE);
     bn_read_bin(s0_T, data + (5 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE);
-    bn_read_bin(h0, data + (5 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_BN_SIZE);
+    
+    for (size_t i = 1; i < RING_SIZE; i++) {
+      bn_read_bin(state->vec_s[i], data + (5 * RLC_EC_SIZE_COMPRESSED) + ((i + 2) * RLC_BN_SIZE), RLC_BN_SIZE);
+    }
 
     // Verify the commitment and ZK proof.
     ec_add(com_x, R_T, J_T_tilde);
+    ec_add(com_x, com_x, J_T);
     ec_add(com_x, com_x, pi_T->a);
     ec_add(com_x, com_x, pi_T->b);
     ec_norm(com_x, com_x);
+    for (size_t i = 1; i < RING_SIZE; i++) {
+      ec_mul(com_x, com_x, state->vec_s[i]);
+    }
     if (decommit(state->com, com_x) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
@@ -373,8 +390,9 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     }
 
     // Compute the half DLSAG signature.
-    ec_add(R, R_T, state->R_B);
-    ec_add(R, R, state->A);
+    ec_add(R_B_times_R_T, state->R_B, R_T);
+    ec_norm(R_B_times_R_T, R_B_times_R_T);
+    ec_add(R, R_B_times_R_T, state->A);
     ec_norm(R, R);
 
     ec_add(J_T_J_B_tilde_A_star, J_T_tilde, state->J_B_tilde);
@@ -447,10 +465,15 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     bn_sub(state->s0_B, state->vec_s[0], state->s0_B);
     bn_mod(state->s0_B, state->s0_B, q);
 
-    // TODO: Check correctness of the partial signature received.
-    if (bn_cmp(h0, state->h0) != RLC_EQ) {
-      THROW(ERR_CAUGHT);
-    }
+    // Check correctness of the partial signature received.
+    ec_mul_gen(g_to_the_s0_B, state->s0_B);
+    ec_mul_gen(g_to_the_s0_T, s0_T);
+    ec_add(g_to_the_s0_B_times_s0_T, g_to_the_s0_B, g_to_the_s0_T);
+    ec_norm(g_to_the_s0_B_times_s0_T, g_to_the_s0_B_times_s0_T);
+
+    ec_mul(pk_to_the_hn_minus_1, state->keys->ec_pk1->pk, h_i);
+    ec_sub(R_B_times_R_T_over_pk, R_B_times_R_T, pk_to_the_hn_minus_1);
+    ec_norm(R_B_times_R_T_over_pk, R_B_times_R_T_over_pk);
 
     // Compute the "almost" signature.
     bn_add(state->s0, state->s0_B, s0_T);
@@ -491,6 +514,9 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     bn_free(h_i);
     ec_free(L_i);
     ec_free(R_i);
+    ec_free(R_B_times_R_T);
+    ec_free(pk_to_the_hn_minus_1);
+    ec_free(R_B_times_R_T_over_pk);
     ec_free(R);
     ec_free(R_T);
     ec_free(J_T);
@@ -500,6 +526,9 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_free(pk_i_to_the_s_i_times_m_i);
     ec_free(pk_i_to_the_h_i);
     ec_free(pk_to_the_m);
+    ec_free(g_to_the_s0_B);
+    ec_free(g_to_the_s0_T);
+    ec_free(g_to_the_s0_B_times_s0_T);
     zk_proof_free(pi_T);
 
     bn_free(q);

@@ -165,9 +165,13 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     ec_add(x, state->R_T, state->J_T_tilde);
+    ec_add(x, x, state->J_T);
     ec_add(x, x, state->pi_T->a);
     ec_add(x, x, state->pi_T->b);
     ec_norm(x, x);
+    for (size_t i = 1; i < RING_SIZE; i++) {
+      ec_mul(x, x, state->vec_s[i]);
+    }
     if (commit(com, x) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
@@ -175,7 +179,7 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Build and define the message.
     char *msg_type = "promise_init_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (6 * RLC_EC_SIZE_COMPRESSED) + ((RING_SIZE + 1) * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
+    const unsigned msg_data_length = (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE) 
     + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T2_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE + RLC_CLDL_PROOF_U2_SIZE;
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(promise_init_msg, msg_type_length, msg_data_length);
@@ -208,12 +212,6 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_write_bin(promise_init_msg->data + (6 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE)
            + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE + RLC_CLDL_PROOF_U2_SIZE, 
            RLC_BN_SIZE, pi_A->z);
-
-    for (size_t i = 1; i < RING_SIZE; i++) {
-      bn_write_bin(promise_init_msg->data + (6 * RLC_EC_SIZE_COMPRESSED) + ((i + 1) * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE)
-                 + RLC_CLDL_PROOF_T1_SIZE + RLC_CLDL_PROOF_T3_SIZE + RLC_CLDL_PROOF_U1_SIZE + RLC_CLDL_PROOF_U2_SIZE, 
-                   RLC_BN_SIZE, state->vec_s[i]);
-    }
 
     memcpy(promise_init_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, promise_init_msg, msg_type_length, msg_data_length);
@@ -400,7 +398,7 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Build and define the message.
     char *msg_type = "promise_sign_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (5 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE);
+    const unsigned msg_data_length = (5 * RLC_EC_SIZE_COMPRESSED) + ((RING_SIZE + 2) * RLC_BN_SIZE);
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(promise_sign_done_msg, msg_type_length, msg_data_length);
 
@@ -412,7 +410,10 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_write_bin(promise_sign_done_msg->data + (4 * RLC_EC_SIZE_COMPRESSED), RLC_EC_SIZE_COMPRESSED, state->pi_T->b, 1);
     bn_write_bin(promise_sign_done_msg->data + (5 * RLC_EC_SIZE_COMPRESSED), RLC_BN_SIZE, state->pi_T->z);
     bn_write_bin(promise_sign_done_msg->data + (5 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE, state->s0_T);
-    bn_write_bin(promise_sign_done_msg->data + (5 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_BN_SIZE, state->h0);
+    
+    for (size_t i = 1; i < RING_SIZE; i++) {
+      bn_write_bin(promise_sign_done_msg->data + (5 * RLC_EC_SIZE_COMPRESSED) + ((i + 2) * RLC_BN_SIZE), RLC_BN_SIZE, state->vec_s[i]);
+    }
 
     memcpy(promise_sign_done_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, promise_sign_done_msg, msg_type_length, msg_data_length);
@@ -654,9 +655,13 @@ int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     ec_add(x, state->R_T, state->J_T_tilde);
+    ec_add(x, x, state->J_T);
     ec_add(x, x, state->pi_T->a);
     ec_add(x, x, state->pi_T->b);
     ec_norm(x, x);
+    for (size_t i = 1; i < RING_SIZE; i++) {
+      ec_mul(x, x, state->vec_s[i]);
+    }
     if (commit(com, x) != RLC_OK) {
       THROW(ERR_CAUGHT);
     }
@@ -664,17 +669,13 @@ int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Build and define the message.
     char *msg_type = "payment_init_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (RING_SIZE * RLC_BN_SIZE) + RLC_EC_SIZE_COMPRESSED;
+    const unsigned msg_data_length = RLC_BN_SIZE + RLC_EC_SIZE_COMPRESSED;
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(payment_init_msg, msg_type_length, msg_data_length);
 
     // Serialize the data for the message.
     bn_write_bin(payment_init_msg->data, RLC_BN_SIZE, com->c);
     ec_write_bin(payment_init_msg->data + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED, com->r, 1);
-
-    for (size_t i = 1; i < RING_SIZE; i++) {
-      bn_write_bin(payment_init_msg->data + RLC_EC_SIZE_COMPRESSED + (i * RLC_BN_SIZE), RLC_BN_SIZE, state->vec_s[i]);
-    }
 
     memcpy(payment_init_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, payment_init_msg, msg_type_length, msg_data_length);
@@ -888,7 +889,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Build and define the message.
     char *msg_type = "payment_sign_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (9 * RLC_EC_SIZE_COMPRESSED) + (4 * RLC_BN_SIZE);
+    const unsigned msg_data_length = (9 * RLC_EC_SIZE_COMPRESSED) + ((RING_SIZE + 4) * RLC_BN_SIZE);
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(payment_sign_done_msg, msg_type_length, msg_data_length);
 
@@ -906,6 +907,10 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_write_bin(payment_sign_done_msg->data + (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED, pi_A->a, 1);
     ec_write_bin(payment_sign_done_msg->data + (8 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED, pi_A->b, 1);
     bn_write_bin(payment_sign_done_msg->data + (9 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_BN_SIZE, pi_A->z);
+
+    for (size_t i = 1; i < RING_SIZE; i++) {
+      bn_write_bin(payment_sign_done_msg->data + (9 * RLC_EC_SIZE_COMPRESSED) + ((i + 4) * RLC_BN_SIZE), RLC_BN_SIZE, state->vec_s[i]);
+    }
 
     memcpy(payment_sign_done_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, payment_sign_done_msg, msg_type_length, msg_data_length);
