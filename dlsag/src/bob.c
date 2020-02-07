@@ -544,7 +544,6 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   return result_status;
 }
 
-// TODO: Cleanup these functions.
 int promise_end_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
     THROW(ERR_NO_VALID);
