@@ -550,15 +550,8 @@ int promise_end_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     THROW(ERR_NO_VALID);
   }
 
-  int result_status = RLC_OK;
-
-  TRY {
-    PROMISE_COMPLETED = 1;
-  } CATCH_ANY {
-    result_status = RLC_ERR;
-  }
-
-  return result_status;
+  PROMISE_COMPLETED = 1;
+  return RLC_OK;
 }
 
 int puzzle_share(bob_state_t state, void *socket) {
@@ -650,15 +643,8 @@ int puzzle_share_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     THROW(ERR_NO_VALID);
   }
 
-  int result_status = RLC_OK;
-
-  TRY {
-    PUZZLE_SHARED = 1;
-  } CATCH_ANY {
-    result_status = RLC_ERR;
-  }
-
-  return result_status;
+  PUZZLE_SHARED = 1;
+  return RLC_OK;
 }
 
 int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data) {
