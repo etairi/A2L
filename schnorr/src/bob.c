@@ -690,7 +690,7 @@ int main(void)
     }
     stop_time = ttimer();
     total_time = stop_time - start_time;
-    printf("\nPromise procedure time: %.5f sec\n", total_time / CLOCK_PRECISION);
+    printf("\nPuzzle promise time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
     if (rc != 0) {
