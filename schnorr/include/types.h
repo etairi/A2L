@@ -17,15 +17,15 @@ typedef message_st *message_t;
   do {                                                                  \
     message = malloc(sizeof(message_st));                               \
     if (message == NULL) {                                              \
-      THROW(ERR_NO_MEMORY);                                             \
+      RLC_THROW(ERR_NO_MEMORY);                                             \
     }                                                                   \
     (message)->type = malloc(sizeof(char) * type_length);               \
     if ((message)->type == NULL) {                                      \
-      THROW(ERR_NO_MEMORY);                                             \
+      RLC_THROW(ERR_NO_MEMORY);                                             \
     }                                                                   \
     (message)->data = malloc(sizeof(uint8_t) * data_length);            \
     if ((message)->data == NULL) {                                      \
-      THROW(ERR_NO_MEMORY);                                             \
+      RLC_THROW(ERR_NO_MEMORY);                                             \
     }                                                                   \
   } while (0)
 
@@ -51,7 +51,7 @@ typedef zk_proof_st *zk_proof_t;
   do {                                        \
     proof = malloc(sizeof(zk_proof_st));      \
     if (proof == NULL) {                      \
-      THROW(ERR_NO_MEMORY);                   \
+      RLC_THROW(ERR_NO_MEMORY);                   \
     }                                         \
     ec_new((proof)->a);                       \
     ec_new((proof)->b);                       \
@@ -83,7 +83,7 @@ typedef zk_proof_cldl_st *zk_proof_cldl_t;
   do {                                        \
     proof = malloc(sizeof(zk_proof_cldl_st)); \
     if (proof == NULL) {                      \
-      THROW(ERR_NO_MEMORY);                   \
+      RLC_THROW(ERR_NO_MEMORY);                   \
     }                                         \
     ec_new((proof)->t2);                      \
   } while (0)
@@ -108,7 +108,7 @@ typedef commit_st *commit_t;
   do {                                        \
     commit = malloc(sizeof(commit_st));       \
     if (commit == NULL) {                     \
-      THROW(ERR_NO_MEMORY);                   \
+      RLC_THROW(ERR_NO_MEMORY);                   \
     }                                         \
     bn_new((commit)->c);                      \
     ec_new((commit)->r);                      \
@@ -139,7 +139,7 @@ typedef cl_params_st *cl_params_t;
   do {                                                \
     params = malloc(sizeof(cl_params_st));            \
     if (params == NULL) {                             \
-      THROW(ERR_NO_MEMORY);                           \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                 \
   } while (0)
 
@@ -163,7 +163,7 @@ typedef cl_ciphertext_st *cl_ciphertext_t;
   do {                                                \
     ciphertext = malloc(sizeof(cl_ciphertext_st));    \
     if (ciphertext == NULL) {                         \
-      THROW(ERR_NO_MEMORY);                           \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                 \
   } while (0)
 
@@ -185,7 +185,7 @@ typedef cl_secret_key_st *cl_secret_key_t;
   do {                                                \
     secret_key = malloc(sizeof(cl_secret_key_st));    \
     if (secret_key == NULL) {                         \
-      THROW(ERR_NO_MEMORY);                           \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                 \
   } while (0)
 
@@ -208,7 +208,7 @@ typedef cl_public_key_st *cl_public_key_t;
   do {                                                \
     public_key = malloc(sizeof(cl_public_key_st));    \
     if (public_key == NULL) {                         \
-      THROW(ERR_NO_MEMORY);                           \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                 \
   } while (0)
 
@@ -230,7 +230,7 @@ typedef ec_secret_key_st *ec_secret_key_t;
   do {                                                \
     secret_key = malloc(sizeof(ec_secret_key_st));    \
     if (secret_key == NULL) {                         \
-      THROW(ERR_NO_MEMORY);                           \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                 \
     bn_new((secret_key)->sk);                         \
   } while (0)
@@ -254,7 +254,7 @@ typedef ec_public_key_st *ec_public_key_t;
   do {                                                \
     public_key = malloc(sizeof(ec_public_key_st));    \
     if (public_key == NULL) {                         \
-      THROW(ERR_NO_MEMORY);                           \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                 \
     ec_new((public_key)->pk);                         \
   } while (0)
@@ -281,7 +281,7 @@ typedef keys_st *keys_t;
   do {                                              \
     keys = malloc(sizeof(keys_st));                 \
     if (keys == NULL) {                             \
-      THROW(ERR_NO_MEMORY);                         \
+      RLC_THROW(ERR_NO_MEMORY);                         \
     }                                               \
     cl_public_key_new((keys)->cl_pk);               \
     cl_secret_key_new((keys)->cl_sk);               \

@@ -62,7 +62,7 @@ typedef alice_state_st *alice_state_t;
   do {                                                      \
     state = malloc(sizeof(alice_state_st));                 \
     if (state == NULL) {                                    \
-      THROW(ERR_NO_MEMORY);                                 \
+      RLC_THROW(ERR_NO_MEMORY);                                 \
     }                                                       \
     keys_new((state)->keys);                                \
     cl_params_new((state)->cl_params);                      \

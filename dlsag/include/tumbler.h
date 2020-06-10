@@ -69,7 +69,7 @@ typedef tumbler_state_st *tumbler_state_t;
   do {                                                    \
     state = malloc(sizeof(tumbler_state_st));             \
     if (state == NULL) {                                  \
-      THROW(ERR_NO_MEMORY);                               \
+      RLC_THROW(ERR_NO_MEMORY);                               \
     }                                                     \
     ring_new((state)->ring, RING_SIZE);                   \
     keys_new((state)->keys_alice);                        \
@@ -81,7 +81,7 @@ typedef tumbler_state_st *tumbler_state_t;
     cl_public_key_new((state)->cl_pk_bob);                \
     (state)->vec_s = malloc(sizeof(bn_t) * RING_SIZE);    \
     if ((state)->vec_s == NULL) {                         \
-      THROW(ERR_NO_MEMORY);                               \
+      RLC_THROW(ERR_NO_MEMORY);                               \
     }                                                     \
     for (size_t i = 0; i < RING_SIZE; i++) {              \
       bn_new((state)->vec_s[i]);                          \

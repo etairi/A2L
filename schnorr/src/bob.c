@@ -52,19 +52,19 @@ int handle_message(bob_state_t state, void *socket, zmq_msg_t message) {
   message_t msg;
   message_null(msg);
 
-  TRY {
+  RLC_TRY {
     printf("Received message size: %ld bytes\n", zmq_msg_size(&message));
     deserialize_message(&msg, (uint8_t *) zmq_msg_data(&message));
 
     printf("Executing %s...\n", msg->type);
     msg_handler_t msg_handler = get_message_handler(msg->type);
     if (msg_handler(state, socket, msg->data) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
     printf("Finished executing %s.\n\n", msg->type);
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     if (msg != NULL) message_free(msg);
   }
 
@@ -76,20 +76,20 @@ int receive_message(bob_state_t state, void *socket) {
 
   zmq_msg_t message;
 
-  TRY {
+  RLC_TRY {
     int rc = zmq_msg_init(&message);
     if (rc != 0) {
       fprintf(stderr, "Error: could not initialize the message.\n");
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     rc = zmq_msg_recv(&message, socket, ZMQ_DONTWAIT);
     if (rc != -1 && handle_message(state, socket, message) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     zmq_msg_close(&message);
   }
 
@@ -103,7 +103,7 @@ int promise_init(void *socket) {
   message_t promise_init_msg;
   message_null(promise_init_msg);
 
-  TRY {
+  RLC_TRY {
     // Build and define the message.
     char *msg_type = "promise_init";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
@@ -120,18 +120,18 @@ int promise_init(void *socket) {
     int rc = zmq_msg_init_size(&promise_init, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&promise_init), serialized_message, total_msg_length);
     rc = zmq_msg_send(&promise_init, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     message_free(promise_init_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
@@ -141,7 +141,7 @@ int promise_init(void *socket) {
 
 int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
@@ -158,7 +158,7 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   zk_proof_cldl_null(pi_cldl);
   message_null(promise_sign_msg);
 
-  TRY {
+  RLC_TRY {
     bn_new(q);
     zk_proof_new(pi_1_prime);
     zk_proof_cldl_new(pi_cldl);
@@ -197,11 +197,11 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_mul_gen(state->R_1_prime, state->k_1_prime);
 
     if (zk_dlog_prove(pi_1_prime, state->R_1_prime, state->k_1_prime) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     if (zk_cldl_verify(pi_cldl, state->g_to_the_alpha, state->ctx_alpha, state->tumbler_cl_pk, state->cl_params) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     // Build and define the message.
@@ -224,18 +224,18 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     int rc = zmq_msg_init_size(&promise_sign, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&promise_sign), serialized_message, total_msg_length);
     rc = zmq_msg_send(&promise_sign, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     bn_free(q);
     zk_proof_free(pi_1_prime);
     zk_proof_cldl_free(pi_cldl);
@@ -248,7 +248,7 @@ int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data) {
 
 int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
@@ -286,7 +286,7 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   bn_null(s_2_prime);
   zk_proof_null(pi_2_prime);
 
-  TRY {
+  RLC_TRY {
     ec_new(com_x);
     ec_new(g_to_the_s_2_prime);
     ec_new(g_to_the_neg_sk);
@@ -314,11 +314,11 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     // Verify the commitment and ZK proof.
     ec_add(com_x, R_2_prime, pi_2_prime->a);
     if (decommit(state->com, com_x) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     if (zk_dlog_verify(pi_2_prime, R_2_prime) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     // Compute the half Schnorr signature.
@@ -331,7 +331,7 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_get_x(x, R_prime);
     bn_mod(r, x, q);
     if (bn_is_zero(r)) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
 		memcpy(tx_msg, tx, tx_len);
@@ -358,7 +358,7 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_add(R_2_prime_time_g_to_the_x_2_minus_e_prime, R_2_prime, g_to_the_x_2_minus_e_prime);
     
     if (ec_cmp(g_to_the_s_2_prime, R_2_prime_time_g_to_the_x_2_minus_e_prime) != RLC_EQ) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
 		bn_mul(s_1_prime, state->keys->ec_sk->sk, state->e_prime);
@@ -389,18 +389,18 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     int rc = zmq_msg_init_size(&promise_end, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&promise_end), serialized_message, total_msg_length);
     rc = zmq_msg_send(&promise_end, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     ec_free(com_x);
     ec_free(g_to_the_s_2_prime);
     ec_free(g_to_the_neg_sk);
@@ -428,7 +428,7 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
 
 int promise_end_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   PROMISE_COMPLETED = 1;
@@ -437,7 +437,7 @@ int promise_end_done_handler(bob_state_t state, void *socket, uint8_t *data) {
 
 int puzzle_share(bob_state_t state, void *socket) {
   if (state == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
   
   int result_status = RLC_OK;
@@ -455,7 +455,7 @@ int puzzle_share(bob_state_t state, void *socket) {
   bn_null(q);
   ec_null(g_to_the_alpha_times_beta);
 
-  TRY {
+  RLC_TRY {
     cl_ciphertext_new(ctx_alpha_times_beta);
     bn_new(q);
     ec_new(g_to_the_alpha_times_beta);
@@ -497,18 +497,18 @@ int puzzle_share(bob_state_t state, void *socket) {
     int rc = zmq_msg_init_size(&puzzle_share, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&puzzle_share), serialized_message, total_msg_length);
     rc = zmq_msg_send(&puzzle_share, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     cl_ciphertext_free(ctx_alpha_times_beta);
     bn_free(q);
     ec_free(g_to_the_alpha_times_beta);
@@ -521,7 +521,7 @@ int puzzle_share(bob_state_t state, void *socket) {
 
 int puzzle_share_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   PUZZLE_SHARED = 1;
@@ -530,7 +530,7 @@ int puzzle_share_done_handler(bob_state_t state, void *socket, uint8_t *data) {
 
 int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
@@ -553,7 +553,7 @@ int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data)
   bn_null(rv);
   ec_null(p);
 
-  TRY {
+  RLC_TRY {
     bn_new(x);
     bn_new(q);
     bn_new(alpha);
@@ -611,15 +611,15 @@ int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data)
 				}
 
         if (verif_status != RLC_OK) {
-          THROW(ERR_CAUGHT);
+          RLC_THROW(ERR_CAUGHT);
         }
 			}
 		}
 
     PUZZLE_SOLVED = 1;
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     bn_free(x);
     bn_free(q);
     bn_free(alpha)
@@ -665,27 +665,27 @@ int main(void)
     exit(1);
   }
 
-  TRY {
+  RLC_TRY {
     bob_state_new(state);
 
     if (generate_cl_params(state->cl_params) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     if (read_keys_from_file_alice_bob(BOB_KEY_FILE_PREFIX,
                                       state->keys,
                                       state->tumbler_cl_pk) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     start_time = ttimer();
     if (promise_init(socket) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     while (!PROMISE_COMPLETED) {
       if (receive_message(state, socket) != RLC_OK) {
-        THROW(ERR_CAUGHT);
+        RLC_THROW(ERR_CAUGHT);
       }
     }
     stop_time = ttimer();
@@ -695,7 +695,7 @@ int main(void)
     rc = zmq_close(socket);
     if (rc != 0) {
       fprintf(stderr, "Error: could not close the socket.\n");
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     printf("Connecting to Alice...\n\n");
@@ -708,23 +708,23 @@ int main(void)
     rc = zmq_connect(socket, ALICE_ENDPOINT);
     if (rc != 0) {
       fprintf(stderr, "Error: could not connect to Alice.\n");
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     if (puzzle_share(state, socket) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     while (!PUZZLE_SHARED) {
       if (receive_message(state, socket) != RLC_OK) {
-        THROW(ERR_CAUGHT);
+        RLC_THROW(ERR_CAUGHT);
       }
     }
 
     rc = zmq_close(socket);
     if (rc != 0) {
       fprintf(stderr, "Error: could not close the socket.\n");
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     socket = zmq_socket(context, ZMQ_REP);
@@ -736,21 +736,21 @@ int main(void)
     rc = zmq_bind(socket, BOB_ENDPOINT);
     if (rc != 0) {
       fprintf(stderr, "Error: could not bind the socket.\n");
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     while (!PUZZLE_SOLVED) {
       if (receive_message(state, socket) != RLC_OK) {
-        THROW(ERR_CAUGHT);
+        RLC_THROW(ERR_CAUGHT);
       }
     }
 
     stop_time = ttimer();
     total_time = stop_time - start_time;
     printf("\nTotal time: %.5f sec\n", total_time / CLOCK_PRECISION);
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     bob_state_free(state);
   }
   

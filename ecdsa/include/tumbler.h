@@ -69,7 +69,7 @@ typedef tumbler_state_st *tumbler_state_t;
   do {                                                    \
     state = malloc(sizeof(tumbler_state_st));             \
     if (state == NULL) {                                  \
-      THROW(ERR_NO_MEMORY);                               \
+      RLC_THROW(ERR_NO_MEMORY);                               \
     }                                                     \
     keys_new((state)->keys_alice);                        \
     keys_new((state)->keys_bob);                          \

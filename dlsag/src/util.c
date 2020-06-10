@@ -57,7 +57,7 @@ void serialize_message(uint8_t **serialized,
 											 const unsigned msg_data_length) {
 	*serialized = malloc(msg_type_length + msg_data_length + (2 * sizeof(unsigned)));
 	if (*serialized == NULL) {
-		THROW(ERR_NO_MEMORY);
+		RLC_THROW(ERR_NO_MEMORY);
 	}
 
 	memcpy(*serialized, &msg_type_length, sizeof(unsigned));
@@ -136,7 +136,7 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		ec_null(ec_ring_pk_1[i]);
 	}
 
-	TRY {
+	RLC_TRY {
 		bn_new(q);
 		bn_new(m_alice_tumbler);
 		bn_new(m_bob_tumbler);
@@ -225,7 +225,7 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		char *tumbler_key_file_name = malloc(tumbler_key_file_length);
 		
 		if (alice_key_file_name == NULL || bob_key_file_name == NULL || tumbler_key_file_name == NULL) {
-			THROW(ERR_CAUGHT);
+			RLC_THROW(ERR_CAUGHT);
 		}
 
 		snprintf(alice_key_file_name, alice_key_file_length, "../keys/%s.%s", ALICE_KEY_FILE_PREFIX, KEY_FILE_EXTENSION);
@@ -235,7 +235,7 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		// Write Alice's keys to a file.
 		FILE *file = fopen(alice_key_file_name, "wb");
 		if (file == NULL) {
-			THROW(ERR_NO_FILE);
+			RLC_THROW(ERR_NO_FILE);
 		}
 
 		bn_write_bin(serialized_ec_sk, RLC_BN_SIZE, ec_sk0_alice);
@@ -279,7 +279,7 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		// Write Bob's keys to a file.
 		file = fopen(bob_key_file_name, "wb");
 		if (file == NULL) {
-			THROW(ERR_NO_FILE);
+			RLC_THROW(ERR_NO_FILE);
 		}
 
 		bn_write_bin(serialized_ec_sk, RLC_BN_SIZE, ec_sk0_bob);
@@ -323,7 +323,7 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		// Write Tumbler's keys to a file.
 		file = fopen(tumbler_key_file_name, "wb");
 		if (file == NULL) {
-			THROW(ERR_NO_FILE);
+			RLC_THROW(ERR_NO_FILE);
 		}
 
 		// Tumbler has four EC public keys, two with Alice and two with Bob.
@@ -375,9 +375,9 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		free(alice_key_file_name);
 		free(bob_key_file_name);
 		free(tumbler_key_file_name);
-	} CATCH_ANY {
+	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
-	} FINALLY {
+	} RLC_FINALLY {
 		bn_free(q);
 		bn_free(m_alice_tumbler);
 		bn_free(m_bob_tumbler);
@@ -421,55 +421,55 @@ int read_keys_from_file_alice_bob(const char *name,
 	char serialized_cl_sk[RLC_CL_SECRET_KEY_SIZE];
 	char serialized_cl_pk[RLC_CL_PUBLIC_KEY_SIZE];
 
-	TRY {
+	RLC_TRY {
 		unsigned key_file_length = strlen(name) + strlen(KEY_FILE_EXTENSION) + 10;
 		char *key_file_name = malloc(key_file_length);
 		
 		if (key_file_name == NULL) {
-			THROW(ERR_CAUGHT);
+			RLC_THROW(ERR_CAUGHT);
 		}
 
 		snprintf(key_file_name, key_file_length, "../keys/%s.%s", name, KEY_FILE_EXTENSION);
 		
 		FILE *file = fopen(key_file_name, "rb");
 		if (file == NULL) {
-			THROW(ERR_NO_FILE);
+			RLC_THROW(ERR_NO_FILE);
 		}
 
 		if (fread(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		bn_read_bin(keys->ec_sk0->sk, serialized_ec_sk, RLC_BN_SIZE);
 		memzero(serialized_ec_sk, RLC_BN_SIZE);
 
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		ec_read_bin(keys->ec_pk0->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 		if (fread(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		bn_read_bin(keys->ec_sk1->sk, serialized_ec_sk, RLC_BN_SIZE);
 
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		ec_read_bin(keys->ec_pk1->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 		if (fread(serialized_m, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		bn_read_bin(keys->m, serialized_m, RLC_BN_SIZE);
 
 		if (fread(serialized_cl_sk, sizeof(char), RLC_CL_SECRET_KEY_SIZE, file) != RLC_CL_SECRET_KEY_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		keys->cl_sk->sk = gp_read_str(serialized_cl_sk);
 		
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		keys->cl_pk->pk = gp_read_str(serialized_cl_pk);
 		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
@@ -477,19 +477,19 @@ int read_keys_from_file_alice_bob(const char *name,
 		for (size_t i = 0; i < RING_SIZE; i++) {
 			memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 			if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-				THROW(ERR_NO_READ);
+				RLC_THROW(ERR_NO_READ);
 			}
 			ec_read_bin(ring->pk_0[i], serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 			memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 			if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-				THROW(ERR_NO_READ);
+				RLC_THROW(ERR_NO_READ);
 			}
 			ec_read_bin(ring->pk_1[i], serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 			memzero(serialized_m, RLC_BN_SIZE);
 			if (fread(serialized_m, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
-				THROW(ERR_NO_READ);
+				RLC_THROW(ERR_NO_READ);
 			}
 			bn_read_bin(ring->m[i], serialized_m, RLC_BN_SIZE);
 		}
@@ -501,25 +501,25 @@ int read_keys_from_file_alice_bob(const char *name,
 		key_file_name = malloc(key_file_length);
 		
 		if (key_file_name == NULL) {
-			THROW(ERR_CAUGHT);
+			RLC_THROW(ERR_CAUGHT);
 		}
 
 		snprintf(key_file_name, key_file_length, "../keys/%s.%s", TUMBLER_KEY_FILE_PREFIX, KEY_FILE_EXTENSION);
 		
 		file = fopen(key_file_name, "rb");
 		if (file == NULL) {
-			THROW(ERR_NO_FILE);
+			RLC_THROW(ERR_NO_FILE);
 		}
 
 		fseek(file, (4 * RLC_BN_SIZE) + (4 * RLC_EC_SIZE_COMPRESSED) + RLC_CL_SECRET_KEY_SIZE, SEEK_SET);
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		tumbler_cl_public_key->pk = gp_read_str(serialized_cl_pk);
 
 		fclose(file);
 		free(key_file_name);
-	} CATCH_ANY {
+	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
 	}
 
@@ -539,117 +539,117 @@ int read_keys_from_file_tumbler(keys_t keys_alice,
 	char serialized_cl_sk[RLC_CL_SECRET_KEY_SIZE];
 	char serialized_cl_pk[RLC_CL_PUBLIC_KEY_SIZE];
 
-	TRY {
+	RLC_TRY {
 		unsigned key_file_length = strlen(TUMBLER_KEY_FILE_PREFIX) + strlen(KEY_FILE_EXTENSION) + 10;
 		char *key_file_name = malloc(key_file_length);
 		
 		if (key_file_name == NULL) {
-			THROW(ERR_CAUGHT);
+			RLC_THROW(ERR_CAUGHT);
 		}
 
 		snprintf(key_file_name, key_file_length, "../keys/%s.%s", TUMBLER_KEY_FILE_PREFIX, KEY_FILE_EXTENSION);
 		
 		FILE *file = fopen(key_file_name, "rb");
 		if (file == NULL) {
-			THROW(ERR_NO_FILE);
+			RLC_THROW(ERR_NO_FILE);
 		}
 
 		if (fread(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		bn_read_bin(keys_alice->ec_sk0->sk, serialized_ec_sk, RLC_BN_SIZE);
 		bn_read_bin(keys_bob->ec_sk0->sk, serialized_ec_sk, RLC_BN_SIZE);
 		memzero(serialized_ec_sk, RLC_BN_SIZE);
 
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		ec_read_bin(keys_alice->ec_pk0->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		ec_read_bin(keys_bob->ec_pk0->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 		if (fread(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		bn_read_bin(keys_alice->ec_sk1->sk, serialized_ec_sk, RLC_BN_SIZE);
 		bn_read_bin(keys_bob->ec_sk1->sk, serialized_ec_sk, RLC_BN_SIZE);
 		memzero(serialized_ec_sk, RLC_BN_SIZE);
 
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		ec_read_bin(keys_alice->ec_pk1->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		ec_read_bin(keys_bob->ec_pk1->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 		if (fread(serialized_m, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		bn_read_bin(keys_alice->m, serialized_m, RLC_BN_SIZE);
 		memzero(serialized_m, RLC_BN_SIZE);
 
 		if (fread(serialized_m, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		bn_read_bin(keys_bob->m, serialized_m, RLC_BN_SIZE);
 
 		if (fread(serialized_cl_sk, sizeof(char), RLC_CL_SECRET_KEY_SIZE, file) != RLC_CL_SECRET_KEY_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		keys_alice->cl_sk->sk = gp_read_str(serialized_cl_sk);
 		keys_bob->cl_sk->sk = gp_read_str(serialized_cl_sk);
 		
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		keys_alice->cl_pk->pk = gp_read_str(serialized_cl_pk);
 		keys_bob->cl_pk->pk = gp_read_str(serialized_cl_pk);
 		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
 
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		cl_public_key_alice->pk = gp_read_str(serialized_cl_pk);
 		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
 
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
-			THROW(ERR_NO_READ);
+			RLC_THROW(ERR_NO_READ);
 		}
 		cl_public_key_bob->pk = gp_read_str(serialized_cl_pk);
 
 		for (size_t i = 0; i < RING_SIZE; i++) {
 			memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 			if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-				THROW(ERR_NO_READ);
+				RLC_THROW(ERR_NO_READ);
 			}
 			ec_read_bin(ring->pk_0[i], serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 			memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 			if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-				THROW(ERR_NO_READ);
+				RLC_THROW(ERR_NO_READ);
 			}
 			ec_read_bin(ring->pk_1[i], serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 
 			memzero(serialized_m, RLC_BN_SIZE);
 			if (fread(serialized_m, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
-				THROW(ERR_NO_READ);
+				RLC_THROW(ERR_NO_READ);
 			}
 			bn_read_bin(ring->m[i], serialized_m, RLC_BN_SIZE);
 		}
 
 		fclose(file);
 		free(key_file_name);
-	} CATCH_ANY {
+	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
 	}
 
@@ -659,9 +659,9 @@ int read_keys_from_file_tumbler(keys_t keys_alice,
 int generate_cl_params(cl_params_t params) {
 	int result_status = RLC_OK;
 
-	TRY {
+	RLC_TRY {
 		if (params == NULL) {
-			THROW(ERR_CAUGHT);
+			RLC_THROW(ERR_CAUGHT);
 		}
 
 		// Parameters generated using HSM.sage script.
@@ -686,7 +686,7 @@ int generate_cl_params(cl_params_t params) {
 		GEN Gx = strtoi("0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
 		GEN Gy = strtoi("0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8");
 		params->G = mkvecn(2, Gx, Gy);
-	} CATCH_ANY {
+	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
 	}
 
@@ -699,7 +699,7 @@ int cl_enc(cl_ciphertext_t ciphertext,
 					 const cl_params_t params) {
   int result_status = RLC_OK;
 
-  TRY {
+  RLC_TRY {
     ciphertext->r = randomi(params->bound);
     ciphertext->c1 = nupow(params->g_q, ciphertext->r, NULL);
 
@@ -711,7 +711,7 @@ int cl_enc(cl_ciphertext_t ciphertext,
 		// f^plaintext = (q^2, Lq, (L - Delta_k) / 4)
     GEN fm = qfi(sqri(params->q), mulii(L, params->q), shifti(subii(sqri(L), params->Delta_K), -2));
     ciphertext->c2 = gmul(nupow(public_key->pk, ciphertext->r, NULL), fm);
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
   }
 
@@ -724,12 +724,12 @@ int cl_dec(GEN *plaintext,
 					 const cl_params_t params) {
   int result_status = RLC_OK;
 
-  TRY {
+  RLC_TRY {
 		// c2 * (c1^sk)^(-1)
     GEN fm = gmul(ciphertext->c2, ginv(nupow(ciphertext->c1, secret_key->sk, NULL)));
     GEN L = diviiexact(gel(fm, 2), params->q);
     *plaintext = Fp_inv(L, params->q);
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
   }
 
@@ -746,7 +746,7 @@ int commit(commit_t com, const ec_t x) {
 	bn_t q;
 	bn_null(q);
 
-	TRY {
+	RLC_TRY {
 		bn_new(q);
 
 		ec_curve_get_ord(q);
@@ -764,9 +764,9 @@ int commit(commit_t com, const ec_t x) {
 			bn_read_bin(com->c, hash, RLC_MD_LEN);
 		}
 		bn_mod(com->c, com->c, q);
-	} CATCH_ANY {
+	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
-	} FINALLY {
+	} RLC_FINALLY {
 		bn_free(q);
 	}
 
@@ -785,7 +785,7 @@ int decommit(const commit_t com, const ec_t x) {
 	bn_null(c_prime);
 	bn_null(q);
 
-	TRY {
+	RLC_TRY {
 		bn_new(c_prime);
 		bn_new(q);
 
@@ -810,9 +810,9 @@ int decommit(const commit_t com, const ec_t x) {
 		if (com->c->used != c_prime->used) {
 			result_status = RLC_ERR;
 		}
-	}	CATCH_ANY {
-		THROW(ERR_CAUGHT);
-	} FINALLY {
+	}	RLC_CATCH_ANY {
+		RLC_THROW(ERR_CAUGHT);
+	} RLC_FINALLY {
 		bn_free(c_prime);
 		bn_free(q);
 	}
@@ -832,7 +832,7 @@ int zk_cldl_prove(zk_proof_cldl_t proof,
 	bn_null(rlc_r2);
 	bn_null(rlc_soundness);
 
-	TRY {
+	RLC_TRY {
 		bn_new(rlc_k);
 		bn_new(rlc_r2);
 		bn_new(rlc_soundness);
@@ -884,9 +884,9 @@ int zk_cldl_prove(zk_proof_cldl_t proof,
 
 		proof->u1 = addmulii(r1, ciphertext->r, k);	// r_1 + r \cdot k
 		proof->u2 = Fp_addmul(r2, x, k, params->q); // r_2 + x \cdot k
-	} CATCH_ANY {
+	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
-	} FINALLY {
+	} RLC_FINALLY {
 		bn_free(k);
 		bn_free(rlc_r2);
 		bn_free(rlc_soundness);
@@ -914,7 +914,7 @@ int zk_cldl_verify(const zk_proof_cldl_t proof,
 	ec_null(Q_to_the_k);
 	ec_null(t2_times_Q_to_the_k);
 
-	TRY {
+	RLC_TRY {
 		bn_new(rlc_k);
 		bn_new(rlc_u2);
 		bn_new(rlc_soundness);
@@ -970,9 +970,9 @@ int zk_cldl_verify(const zk_proof_cldl_t proof,
 		&&  gequal(gmul(proof->t3, nupow(ciphertext->c1, k, NULL)), nupow(params->g_q, proof->u1, NULL))) {
 			result_status = RLC_OK;
 		}
-	} CATCH_ANY {
+	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
-	} FINALLY {
+	} RLC_FINALLY {
 		bn_free(rlc_k);
 		bn_free(rlc_u2);
 		bn_free(rlc_soundness);
@@ -997,7 +997,7 @@ int zk_dlog_prove(zk_proof_t proof, const ec_t h, const bn_t w) {
 	bn_null(r);
 	bn_null(q);
 
-	TRY {
+	RLC_TRY {
 		bn_new(e);
 		bn_new(r);
 		bn_new(q);
@@ -1025,9 +1025,9 @@ int zk_dlog_prove(zk_proof_t proof, const ec_t h, const bn_t w) {
 		bn_mod(proof->z, proof->z, q);
 		bn_add(proof->z, proof->z, r);
 		bn_mod(proof->z, proof->z, q);
-	} CATCH_ANY {
+	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
-	} FINALLY {
+	} RLC_FINALLY {
 		bn_free(e);
 		bn_free(r);
 		bn_free(q);
@@ -1055,7 +1055,7 @@ int zk_dlog_verify(const zk_proof_t proof, const ec_t h) {
 	ec_null(h_to_the_e);
 	ec_null(a_times_h_to_the_e);
 
-	TRY {
+	RLC_TRY {
 		bn_new(e);
 		bn_new(q);
 
@@ -1085,9 +1085,9 @@ int zk_dlog_verify(const zk_proof_t proof, const ec_t h) {
 		if (ec_cmp(g_to_the_z, a_times_h_to_the_e) == RLC_EQ) {
 			result_status = RLC_OK;
 		}
-	} CATCH_ANY {
-		THROW(ERR_CAUGHT);
-	} FINALLY {
+	} RLC_CATCH_ANY {
+		RLC_THROW(ERR_CAUGHT);
+	} RLC_FINALLY {
 		bn_free(e);
 		bn_free(q);
 		ec_free(g_to_the_z);
@@ -1111,7 +1111,7 @@ int zk_dhtuple_prove(zk_proof_t proof, const ec_t h, const ec_t u, const ec_t v,
 	bn_null(r);
 	bn_null(q);
 
-	TRY {
+	RLC_TRY {
 		bn_new(e);
 		bn_new(r);
 		bn_new(q);
@@ -1141,9 +1141,9 @@ int zk_dhtuple_prove(zk_proof_t proof, const ec_t h, const ec_t u, const ec_t v,
 		bn_mod(proof->z, proof->z, q);
 		bn_add(proof->z, proof->z, r);
 		bn_mod(proof->z, proof->z, q);
-	} CATCH_ANY {
+	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
-	} FINALLY {
+	} RLC_FINALLY {
 		bn_free(e);
 		bn_free(r);
 		bn_free(q);
@@ -1177,7 +1177,7 @@ int zk_dhtuple_verify(const zk_proof_t proof, const ec_t h, const ec_t u, const 
 	ec_null(v_to_the_e);
 	ec_null(b_times_v_to_the_e);
 
-	TRY {
+	RLC_TRY {
 		bn_new(e);
 		bn_new(q);
 
@@ -1217,9 +1217,9 @@ int zk_dhtuple_verify(const zk_proof_t proof, const ec_t h, const ec_t u, const 
 		&&	ec_cmp(h_to_the_z, b_times_v_to_the_e) == RLC_EQ) {
 			result_status = RLC_OK;
 		}
-	} CATCH_ANY {
-		THROW(ERR_CAUGHT);
-	} FINALLY {
+	} RLC_CATCH_ANY {
+		RLC_THROW(ERR_CAUGHT);
+	} RLC_FINALLY {
 		bn_free(e);
 		bn_free(q);
 		ec_free(g_to_the_z);

@@ -52,19 +52,19 @@ int handle_message(tumbler_state_t state, void *socket, zmq_msg_t message) {
   message_t msg;
   message_null(msg);
 
-  TRY {
+  RLC_TRY {
     printf("Received message size: %ld bytes\n", zmq_msg_size(&message));
     deserialize_message(&msg, (uint8_t *) zmq_msg_data(&message));
 
     printf("Executing %s...\n", msg->type);
     msg_handler_t msg_handler = get_message_handler(msg->type);
     if (msg_handler(state, socket, msg->data) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
     printf("Finished executing %s.\n\n", msg->type);
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     if (msg != NULL) message_free(msg);
   }
 
@@ -76,20 +76,20 @@ int receive_message(tumbler_state_t state, void *socket) {
 
   zmq_msg_t message;
 
-  TRY {
+  RLC_TRY {
     int rc = zmq_msg_init(&message);
     if (rc != 0) {
       fprintf(stderr, "Error: could not initialize the message.\n");
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     rc = zmq_msg_recv(&message, socket, ZMQ_DONTWAIT);
     if (rc != -1 && handle_message(state, socket, message) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     zmq_msg_close(&message);
   }
 
@@ -98,7 +98,7 @@ int receive_message(tumbler_state_t state, void *socket) {
 
 int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
@@ -117,7 +117,7 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   commit_null(com);
   zk_proof_cldl_null(pi_cldl);
   
-  TRY {
+  RLC_TRY {
     bn_new(q);
     ec_new(x);
     commit_new(com);
@@ -132,7 +132,7 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_mul_gen(state->R_2_prime, state->k_2_prime);
     
     if (zk_dlog_prove(state->pi_2_prime, state->R_2_prime, state->k_2_prime) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     const unsigned alpha_str_len = bn_size_str(state->alpha, 10);
@@ -141,16 +141,16 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
     GEN plain_alpha = strtoi(alpha_str);
     if (cl_enc(state->ctx_alpha, plain_alpha, state->keys_bob->cl_pk, state->cl_params) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     if (zk_cldl_prove(pi_cldl, plain_alpha, state->ctx_alpha, state->keys_bob->cl_pk, state->cl_params) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     ec_add(x, state->R_2_prime, state->pi_2_prime->a);
     if (commit(com, x) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     // Build and define the message.
@@ -188,18 +188,18 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     int rc = zmq_msg_init_size(&promise_init, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&promise_init), serialized_message, total_msg_length);
     rc = zmq_msg_send(&promise_init, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     bn_free(q);
     ec_free(x);
     commit_free(com);
@@ -213,7 +213,7 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
 int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
@@ -258,7 +258,7 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   
   message_null(promise_sign_done_msg);
 
-  TRY {
+  RLC_TRY {
     bn_new(q);
     bn_new(x);
     bn_new(s);
@@ -284,7 +284,7 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
     // Verify ZK proof.
     if (zk_dlog_verify(pi_1_prime, state->R_1_prime) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     // Compute the half ECDSA signature and ZK proofs.
@@ -297,11 +297,11 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_mod(k_2_prime_times_alpha, k_2_prime_times_alpha, q);
 
     if (zk_dlog_prove(pi_c_prime, R_c_prime, k_2_prime_times_alpha) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     if (zk_dhtuple_prove(pi_a_prime, state->R_2_prime, state->g_to_the_alpha, R_c_prime, state->alpha) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     ec_mul(R_prime, state->R_1_prime, k_2_prime_times_alpha);
@@ -310,7 +310,7 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_get_x(x, R_prime);
     bn_mod(state->r_prime, x, q);
     if (bn_is_zero(state->r_prime)) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
 		md_map(hash, tx, tx_len);
@@ -344,7 +344,7 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
     GEN plain_k_2_times_e = strtoi(plain_str);
     if (cl_enc(ctx_k_2_times_e, plain_k_2_times_e, state->cl_pk_bob, state->cl_params) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     const unsigned v_str_len = bn_size_str(k_2_times_r_times_ec_sk_2, 10);
@@ -386,18 +386,18 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     int rc = zmq_msg_init_size(&promise_sign, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&promise_sign), serialized_message, total_msg_length);
     rc = zmq_msg_send(&promise_sign, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     bn_free(q);
     bn_free(x);
     bn_free(s);
@@ -423,7 +423,7 @@ int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
 int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
@@ -448,7 +448,7 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   ec_null(pk_to_the_r_prime);
   ec_null(pk_to_the_r_times_go_to_the_e);
 
-  TRY {
+  RLC_TRY {
     bn_new(q);
     bn_new(s_prime);
     bn_new(k_2_prime_times_s_prime);
@@ -475,7 +475,7 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_norm(pk_to_the_r_times_go_to_the_e, pk_to_the_r_times_go_to_the_e);
 
     if (ec_cmp(R_1_prime_to_the_k_2_times_s, pk_to_the_r_times_go_to_the_e) != RLC_EQ) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     // Build and define the message.
@@ -494,18 +494,18 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     int rc = zmq_msg_init_size(&promise_end_done, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&promise_end_done), serialized_message, total_msg_length);
     rc = zmq_msg_send(&promise_end_done, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     bn_free(q);
     bn_free(s_prime);
     bn_free(k_2_prime_times_s_prime);
@@ -523,7 +523,7 @@ int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
 int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
@@ -540,7 +540,7 @@ int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   commit_null(com);
   message_null(payment_init_msg);
 
-  TRY {
+  RLC_TRY {
     bn_new(q);
     ec_new(x);
     commit_new(com);
@@ -551,12 +551,12 @@ int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_mul_gen(state->R_2, state->k_2);
     
     if (zk_dlog_prove(state->pi_2, state->R_2, state->k_2) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     ec_add(x, state->R_2, state->pi_2->a);
     if (commit(com, x) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     // Build and define the message.
@@ -578,18 +578,18 @@ int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     int rc = zmq_msg_init_size(&payment_init, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&payment_init), serialized_message, total_msg_length);
     rc = zmq_msg_send(&payment_init, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     commit_free(com);
     bn_free(q);
     ec_free(x);
@@ -602,7 +602,7 @@ int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
 int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
@@ -646,7 +646,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   cl_ciphertext_null(ctx_k_2_times_e);
   cl_ciphertext_null(ctx);
 
-  TRY {
+  RLC_TRY {
     bn_new(q);
     bn_new(r);
     bn_new(x);
@@ -683,7 +683,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
     // Verify ZK proof.
     if (zk_dlog_verify(pi_1, R_1) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     ec_curve_get_ord(q);
@@ -691,7 +691,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     // Decrypt the ciphertext.
     GEN gamma;
     if (cl_dec(&gamma, ctx_alpha_times_beta_times_tau, state->keys_alice->cl_sk, state->cl_params) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
     bn_read_str(state->gamma, GENtostr(gamma), strlen(GENtostr(gamma)), 10);
 
@@ -703,11 +703,11 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     bn_mul(k_2_times_gamma, state->k_2, state->gamma);
     bn_mod(k_2_times_gamma, k_2_times_gamma, q);
     if (zk_dlog_prove(pi_c, R_c, k_2_times_gamma) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     if (zk_dhtuple_prove(pi_gamma, state->R_2, g_to_the_gamma, R_c, state->gamma) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     ec_mul(R, R_1, k_2_times_gamma);
@@ -716,7 +716,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     ec_get_x(x, R);
     bn_mod(state->r, x, q);
     if (bn_is_zero(state->r)) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
 		md_map(hash, tx, tx_len);
@@ -750,7 +750,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
     GEN plain_k_2_times_e = strtoi(plain_str);
     if (cl_enc(ctx_k_2_times_e, plain_k_2_times_e, state->cl_pk_alice, state->cl_params) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     const unsigned v_str_len = bn_size_str(k_2_times_r_times_ec_sk_2, 10);
@@ -793,18 +793,18 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     int rc = zmq_msg_init_size(&payment_sign_done, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&payment_sign_done), serialized_message, total_msg_length);
     rc = zmq_msg_send(&payment_sign_done, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     bn_free(q);
     bn_free(r);
     bn_free(x);
@@ -834,7 +834,7 @@ int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data) {
 
 int payment_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
-    THROW(ERR_NO_VALID);
+    RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
@@ -862,7 +862,7 @@ int payment_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   bn_null(gamma_inverse);
   ec_null(p);
 
-  TRY {
+  RLC_TRY {
     bn_new(q);
     bn_new(x);
     bn_new(s_hat);
@@ -927,7 +927,7 @@ int payment_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
         }
 
         if (verif_status != RLC_OK) {
-          THROW(ERR_CAUGHT);
+          RLC_THROW(ERR_CAUGHT);
         }
 			}
 		}
@@ -951,18 +951,18 @@ int payment_end_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     int rc = zmq_msg_init_size(&puzzle_solve, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     memcpy(zmq_msg_data(&puzzle_solve), serialized_message, total_msg_length);
     rc = zmq_msg_send(&puzzle_solve, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     bn_free(q);
     bn_free(x);
     bn_free(s_hat);
@@ -1005,11 +1005,11 @@ int main(void)
     exit(1);
   }
 
-  TRY {
+  RLC_TRY {
     tumbler_state_new(state);
 
     if (generate_cl_params(state->cl_params) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     if (read_keys_from_file_tumbler(state->keys_alice,
@@ -1018,17 +1018,17 @@ int main(void)
                                     state->cl_pk_bob,
                                     state->ctx_ec_sk_alice,
                                     state->ctx_ec_sk_bob) != RLC_OK) {
-      THROW(ERR_CAUGHT);
+      RLC_THROW(ERR_CAUGHT);
     }
 
     while (1) {
       if (receive_message(state, socket) != RLC_OK) {
-        THROW(ERR_CAUGHT);
+        RLC_THROW(ERR_CAUGHT);
       }
     }
-  } CATCH_ANY {
+  } RLC_CATCH_ANY {
     result_status = RLC_ERR;
-  } FINALLY {
+  } RLC_FINALLY {
     tumbler_state_free(state);
   }
 
