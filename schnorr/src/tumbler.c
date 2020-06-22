@@ -143,6 +143,8 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     if (cl_enc(state->ctx_alpha, plain_alpha, state->keys_bob->cl_pk, state->cl_params) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
+    printf("enc->c1: %lu\n", strlen(GENtostr(state->ctx_alpha->c1)));
+    printf("enc->c2: %lu\n", strlen(GENtostr(state->ctx_alpha->c2)));
 
     if (zk_cldl_prove(pi_cldl, plain_alpha, state->ctx_alpha, state->keys_bob->cl_pk, state->cl_params) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
@@ -809,7 +811,9 @@ int main(void)
     if (read_keys_from_file_tumbler(state->keys_alice,
                                     state->keys_bob,
                                     state->cl_pk_alice,
-                                    state->cl_pk_bob) != RLC_OK) {
+                                    state->cl_pk_bob,
+                                    state->ps_sk,
+                                    state->ps_pk) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
 

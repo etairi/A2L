@@ -40,6 +40,7 @@ typedef struct {
   keys_t keys;
   cl_params_t cl_params;
   cl_public_key_t tumbler_cl_pk;
+  ps_public_key_t tumbler_ps_pk;
   commit_t com;
   ec_t g_to_the_alpha;
   cl_ciphertext_t ctx_alpha;
@@ -58,11 +59,12 @@ typedef bob_state_st *bob_state_t;
   do {                                                      \
     state = malloc(sizeof(bob_state_st));                   \
     if (state == NULL) {                                    \
-      RLC_THROW(ERR_NO_MEMORY);                                 \
+      RLC_THROW(ERR_NO_MEMORY);                             \
     }                                                       \
     keys_new((state)->keys);                                \
     cl_params_new((state)->cl_params);                      \
     cl_public_key_new((state)->tumbler_cl_pk);              \
+    ps_public_key_new((state)->tumbler_ps_pk);              \
     commit_new((state)->com);                               \
     ec_new((state)->g_to_the_alpha);                        \
     cl_ciphertext_new((state)->ctx_alpha);                  \
@@ -78,6 +80,7 @@ typedef bob_state_st *bob_state_t;
     keys_free((state)->keys);                               \
     cl_params_free((state)->cl_params);                     \
     cl_public_key_free((state)->tumbler_cl_pk);             \
+    ps_public_key_free((state)->tumbler_ps_pk);             \
     commit_free((state)->com);                              \
     ec_free((state)->g_to_the_alpha);                       \
     cl_ciphertext_free((state)->ctx_alpha);                 \

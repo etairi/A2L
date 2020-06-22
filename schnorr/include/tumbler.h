@@ -42,6 +42,8 @@ typedef struct {
   cl_params_t cl_params;
   cl_public_key_t cl_pk_alice;
   cl_public_key_t cl_pk_bob;
+  ps_secret_key_t ps_sk;
+  ps_public_key_t ps_pk;
   bn_t alpha;
   ec_t g_to_the_alpha;
   cl_ciphertext_t ctx_alpha;
@@ -66,13 +68,15 @@ typedef tumbler_state_st *tumbler_state_t;
   do {                                                    \
     state = malloc(sizeof(tumbler_state_st));             \
     if (state == NULL) {                                  \
-      RLC_THROW(ERR_NO_MEMORY);                               \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                     \
     keys_new((state)->keys_alice);                        \
     keys_new((state)->keys_bob);                          \
     cl_params_new((state)->cl_params);                    \
     cl_public_key_new((state)->cl_pk_alice);              \
     cl_public_key_new((state)->cl_pk_bob);                \
+    ps_secret_key_new((state)->ps_sk);                    \
+    ps_public_key_new((state)->ps_pk);                    \
     bn_new((state)->alpha);                               \
     ec_new((state)->g_to_the_alpha);                      \
     cl_ciphertext_new((state)->ctx_alpha);                \
@@ -96,6 +100,8 @@ typedef tumbler_state_st *tumbler_state_t;
     cl_params_free((state)->cl_params);                   \
     cl_public_key_free((state)->cl_pk_alice);             \
     cl_public_key_free((state)->cl_pk_bob);               \
+    ps_secret_key_free((state)->ps_sk);                   \
+    ps_public_key_free((state)->ps_pk);                   \
     bn_free((state)->alpha);                              \
     ec_free((state)->g_to_the_alpha);                     \
     cl_ciphertext_free((state)->ctx_alpha);               \

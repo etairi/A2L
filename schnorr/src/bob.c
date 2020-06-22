@@ -674,7 +674,8 @@ int main(void)
 
     if (read_keys_from_file_alice_bob(BOB_KEY_FILE_PREFIX,
                                       state->keys,
-                                      state->tumbler_cl_pk) != RLC_OK) {
+                                      state->tumbler_cl_pk,
+                                      state->tumbler_ps_pk) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
 
