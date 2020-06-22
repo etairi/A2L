@@ -29,6 +29,7 @@ int init() {
 }
 
 int clean() {
+	pari_close();
 	return core_clean();
 }
 

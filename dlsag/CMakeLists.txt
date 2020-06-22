@@ -8,7 +8,11 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wno-unused-parameter -Wno-macro-redefined")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -O3 -Wno-clobbered")
+if(APPLE)
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -O3")
+else()
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -O3 -Wno-clobbered")
+endif()
 
 # add extra include directories
 set(INCLUDE /usr/local/include ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_BINARY_DIR}/include)
