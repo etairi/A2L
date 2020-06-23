@@ -14,6 +14,7 @@
 static uint8_t tx[2] = { 116, 120 }; // "tx"
 
 typedef enum {
+  SETUP_DONE,
   PROMISE_SENT,
   PUZZLE_SHARE,
   PUZZLE_SOLVE,
@@ -28,6 +29,7 @@ typedef struct {
 } symstruct_t;
 
 static symstruct_t msg_lookuptable[] = {
+  { "setup_done", SETUP_DONE },
   { "promise_sent", PROMISE_SENT },
   { "puzzle_share", PUZZLE_SHARE },
   { "payment_init_done", PAYMENT_INIT_DONE },
@@ -42,6 +44,7 @@ typedef struct {
   keys_t keys;
   cl_params_t cl_params;
   cl_public_key_t tumbler_cl_pk;
+  ps_public_key_t tumbler_ps_pk;
   commit_t com;
   ec_t g_to_the_alpha_times_beta;
   cl_ciphertext_t ctx_alpha_times_beta;
@@ -52,6 +55,10 @@ typedef struct {
   bn_t e;
   bn_t tau;
   bn_t alpha_hat;
+  bn_t tid;
+  ps_signature_t sigma;
+  pedersen_com_t pcom;
+  pedersen_decom_t pdecom;
 } alice_state_st;
 
 typedef alice_state_st *alice_state_t;
@@ -62,11 +69,12 @@ typedef alice_state_st *alice_state_t;
   do {                                                      \
     state = malloc(sizeof(alice_state_st));                 \
     if (state == NULL) {                                    \
-      RLC_THROW(ERR_NO_MEMORY);                                 \
+      RLC_THROW(ERR_NO_MEMORY);                             \
     }                                                       \
     keys_new((state)->keys);                                \
     cl_params_new((state)->cl_params);                      \
     cl_public_key_new((state)->tumbler_cl_pk);              \
+    ps_public_key_new((state)->tumbler_ps_pk);              \
     commit_new((state)->com);                               \
     ec_new((state)->g_to_the_alpha_times_beta);             \
     cl_ciphertext_new((state)->ctx_alpha_times_beta);       \
@@ -77,6 +85,10 @@ typedef alice_state_st *alice_state_t;
     bn_new((state)->e);                                     \
     bn_new((state)->tau);                                   \
     bn_new((state)->alpha_hat);                             \
+    bn_new((state)->tid);                                   \
+    ps_signature_new((state)->sigma);                       \
+    pedersen_com_new((state)->pcom);                        \
+    pedersen_decom_new((state)->pdecom);                    \
   } while (0)
 
 #define alice_state_free(state)                             \
@@ -84,6 +96,7 @@ typedef alice_state_st *alice_state_t;
     keys_free((state)->keys);                               \
     cl_params_free((state)->cl_params);                     \
     cl_public_key_free((state)->tumbler_cl_pk);             \
+    ps_public_key_free((state)->tumbler_ps_pk);             \
     commit_free((state)->com);                              \
     ec_free((state)->g_to_the_alpha_times_beta);            \
     cl_ciphertext_free((state)->ctx_alpha_times_beta);      \
@@ -94,6 +107,10 @@ typedef alice_state_st *alice_state_t;
     bn_free((state)->e);                                    \
     bn_free((state)->tau);                                  \
     bn_free((state)->alpha_hat);                            \
+    bn_free((state)->tid);                                  \
+    ps_signature_free((state)->sigma);                      \
+    pedersen_com_new((state)->pcom);                        \
+    pedersen_decom_new((state)->pdecom);                    \
     free(state);                                            \
     state = NULL;                                           \
   } while (0)
@@ -105,10 +122,14 @@ msg_handler_t get_message_handler(char *key);
 int handle_message(alice_state_t state, void *socket, zmq_msg_t message);
 int receive_message(alice_state_t state, void *socket);
 
+int setup(alice_state_t state, void *socket);
+int setup_done_handler(alice_state_t state, void *socket, uint8_t *data);
+int token_share(alice_state_t state, void *socket);
 int puzzle_share_handler(alice_state_t state, void *socket, uint8_t *data);
 int payment_init(void *socket);
 int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data);
 int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data);
 int puzzle_solve_handler(alice_state_t state, void *socket, uint8_t *data);
+int puzzle_solution_share(alice_state_t state, void *socket);
 
 #endif // TRILERO_ECDSA_INCLUDE_ALICE

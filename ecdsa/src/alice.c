@@ -8,6 +8,7 @@
 #include "types.h"
 #include "util.h"
 
+unsigned SETUP_COMPLETED;
 unsigned PUZZLE_SHARED;
 unsigned PUZZLE_SOLVED;
 
@@ -24,6 +25,9 @@ int get_message_type(char *key) {
 msg_handler_t get_message_handler(char *key) {
   switch (get_message_type(key))
   {
+    case SETUP_DONE:
+      return setup_done_handler;
+    
     case PUZZLE_SHARE:
       return puzzle_share_handler;
 
@@ -87,6 +91,172 @@ int receive_message(alice_state_t state, void *socket) {
     result_status = RLC_ERR;
   } RLC_FINALLY {
     zmq_msg_close(&message);
+  }
+
+  return result_status;
+}
+
+int setup(alice_state_t state, void *socket) {
+  if (state == NULL) {
+    RLC_THROW(ERR_NO_VALID);
+  }
+  
+  int result_status = RLC_OK;
+  uint8_t *serialized_message = NULL;
+  
+  message_t setup_msg;
+  message_null(setup_msg);
+
+  bn_t q;
+  bn_null(q);
+
+  pedersen_com_zk_proof_t com_zk_proof;
+  pedersen_com_zk_proof_null(com_zk_proof);
+
+  RLC_TRY {
+    bn_new(q);
+    pedersen_com_zk_proof_new(com_zk_proof);
+
+    ec_curve_get_ord(q);
+    bn_rand_mod(state->tid, q);
+
+    if (pedersen_commit(state->pcom, state->pdecom, state->tumbler_ps_pk->Y_1, state->tid) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    if (zk_pedersen_com_prove(com_zk_proof, state->tumbler_ps_pk->Y_1, state->pcom, state->pdecom) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    // Build and define the message.
+    char *msg_type = "setup";
+    const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
+    const unsigned msg_data_length = (2 * RLC_G1_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE);
+    const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
+    message_new(setup_msg, msg_type_length, msg_data_length);
+    
+    // Serialize the message.
+    g1_write_bin(setup_msg->data, RLC_G1_SIZE_COMPRESSED, state->pcom->c, 1);
+    g1_write_bin(setup_msg->data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, com_zk_proof->c->c, 1);
+    bn_write_bin(setup_msg->data + (2 * RLC_G1_SIZE_COMPRESSED), RLC_BN_SIZE, com_zk_proof->u);
+    bn_write_bin(setup_msg->data + (2 * RLC_G1_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE, com_zk_proof->v);
+
+    memcpy(setup_msg->type, msg_type, msg_type_length);
+    serialize_message(&serialized_message, setup_msg, msg_type_length, msg_data_length);
+
+    // Send the message.
+    zmq_msg_t setup;
+    int rc = zmq_msg_init_size(&setup, total_msg_length);
+    if (rc < 0) {
+      fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    memcpy(zmq_msg_data(&setup), serialized_message, total_msg_length);
+    rc = zmq_msg_send(&setup, socket, ZMQ_DONTWAIT);
+    if (rc != total_msg_length) {
+      fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+  } RLC_CATCH_ANY {
+    result_status = RLC_ERR;
+  } RLC_FINALLY {
+    bn_free(q);
+    pedersen_com_zk_proof_free(com_zk_proof);
+    if (setup_msg != NULL) message_free(setup_msg);
+    if (serialized_message != NULL) free(serialized_message);
+  }
+
+  return result_status;
+}
+
+int setup_done_handler(alice_state_t state, void *socket, uint8_t *data) {
+  if (state == NULL || data == NULL) {
+    RLC_THROW(ERR_NO_VALID);
+  }
+
+  int result_status = RLC_OK;
+
+  bn_t q, t;
+  bn_null(q);
+  bn_null(t);
+
+  RLC_TRY {
+    bn_new(q);
+    bn_new(t);
+
+    // Deserialize the data from the message.
+    g1_read_bin(state->sigma->sigma_1, data, RLC_G1_SIZE_COMPRESSED);
+    g1_read_bin(state->sigma->sigma_2, data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED);
+
+    if (ps_unblind(state->sigma, state->pdecom) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+    
+    g1_get_ord(q);
+    bn_rand_mod(t, q);
+
+    g1_mul(state->sigma->sigma_1, state->sigma->sigma_1, t);
+    g1_mul(state->sigma->sigma_2, state->sigma->sigma_2, t);
+    SETUP_COMPLETED = 1;
+  } RLC_CATCH_ANY {
+    result_status = RLC_ERR;
+  } RLC_FINALLY {
+    bn_new(q);
+    bn_new(t);
+  }
+
+  return result_status;
+}
+
+int token_share(alice_state_t state, void *socket) {
+  if (state == NULL) {
+    RLC_THROW(ERR_NO_VALID);
+  }
+
+  int result_status = RLC_OK;
+
+  uint8_t *serialized_message = NULL;
+
+  message_t token_share_msg;
+  message_null(token_share_msg);
+
+  RLC_TRY {
+    // Build and define the message.
+    char *msg_type = "token_share";
+    const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
+    const unsigned msg_data_length = RLC_BN_SIZE + (2 * RLC_G1_SIZE_COMPRESSED);
+    const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
+    message_new(token_share_msg, msg_type_length, msg_data_length);
+    
+    // Serialize the data for the message.
+    bn_write_bin(token_share_msg->data, RLC_BN_SIZE, state->tid);
+    g1_write_bin(token_share_msg->data + RLC_BN_SIZE, RLC_G1_SIZE_COMPRESSED, state->sigma->sigma_1, 1);
+    g1_write_bin(token_share_msg->data + RLC_BN_SIZE + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, state->sigma->sigma_2, 1);
+
+    // Serialize the message.
+    memcpy(token_share_msg->type, msg_type, msg_type_length);
+    serialize_message(&serialized_message, token_share_msg, msg_type_length, msg_data_length);
+
+    // Send the message.
+    zmq_msg_t token_share;
+    int rc = zmq_msg_init_size(&token_share, total_msg_length);
+    if (rc < 0) {
+      fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    memcpy(zmq_msg_data(&token_share), serialized_message, total_msg_length);
+    rc = zmq_msg_send(&token_share, socket, ZMQ_DONTWAIT);
+    if (rc != total_msg_length) {
+      fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+  } RLC_CATCH_ANY {
+    result_status = RLC_ERR;
+  } RLC_FINALLY {
+    if (token_share_msg != NULL) message_free(token_share_msg);
+    if (serialized_message != NULL) free(serialized_message);
   }
 
   return result_status;
@@ -187,7 +357,7 @@ int payment_init(void *socket) {
   } RLC_CATCH_ANY {
     result_status = RLC_ERR;
   } RLC_FINALLY {
-    message_free(payment_init_msg);
+    if (payment_init_msg != NULL) message_free(payment_init_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
 
@@ -586,7 +756,7 @@ int puzzle_solve_handler(alice_state_t state, void *socket, uint8_t *data) {
   return result_status;
 }
 
-int puzzle_solution_send(alice_state_t state, void *socket) {
+int puzzle_solution_share(alice_state_t state, void *socket) {
   if (state == NULL) {
     RLC_THROW(ERR_NO_VALID);
   }
@@ -595,8 +765,8 @@ int puzzle_solution_send(alice_state_t state, void *socket) {
 
   uint8_t *serialized_message = NULL;
 
-  message_t puzzle_solution_send_msg;
-  message_null(puzzle_solution_send_msg);
+  message_t puzzle_solution_share_msg;
+  message_null(puzzle_solution_share_msg);
 
   RLC_TRY {
     // Build and define the message.
@@ -604,25 +774,25 @@ int puzzle_solution_send(alice_state_t state, void *socket) {
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
     const unsigned msg_data_length = RLC_BN_SIZE;
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
-    message_new(puzzle_solution_send_msg, msg_type_length, msg_data_length);
+    message_new(puzzle_solution_share_msg, msg_type_length, msg_data_length);
     
     // Serialize the data for the message.
-    bn_write_bin(puzzle_solution_send_msg->data, RLC_BN_SIZE, state->alpha_hat);
+    bn_write_bin(puzzle_solution_share_msg->data, RLC_BN_SIZE, state->alpha_hat);
 
     // Serialize the message.
-    memcpy(puzzle_solution_send_msg->type, msg_type, msg_type_length);
-    serialize_message(&serialized_message, puzzle_solution_send_msg, msg_type_length, msg_data_length);
+    memcpy(puzzle_solution_share_msg->type, msg_type, msg_type_length);
+    serialize_message(&serialized_message, puzzle_solution_share_msg, msg_type_length, msg_data_length);
 
     // Send the message.
-    zmq_msg_t puzzle_solution_send;
-    int rc = zmq_msg_init_size(&puzzle_solution_send, total_msg_length);
+    zmq_msg_t puzzle_solution_share;
+    int rc = zmq_msg_init_size(&puzzle_solution_share, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       RLC_THROW(ERR_CAUGHT);
     }
 
-    memcpy(zmq_msg_data(&puzzle_solution_send), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&puzzle_solution_send, socket, ZMQ_DONTWAIT);
+    memcpy(zmq_msg_data(&puzzle_solution_share), serialized_message, total_msg_length);
+    rc = zmq_msg_send(&puzzle_solution_share, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       RLC_THROW(ERR_CAUGHT);
@@ -630,7 +800,7 @@ int puzzle_solution_send(alice_state_t state, void *socket) {
   } RLC_CATCH_ANY {
     result_status = RLC_ERR;
   } RLC_FINALLY {
-    message_free(puzzle_solution_send_msg);
+    if (puzzle_solution_share_msg != NULL) message_free(puzzle_solution_share_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
 
@@ -641,10 +811,11 @@ int main(void)
 {
   init();
   int result_status = RLC_OK;
+  SETUP_COMPLETED = 0;
   PUZZLE_SHARED = 0;
   PUZZLE_SOLVED = 0;
 
-  unsigned long start_time, stop_time, total_time;
+  long long start_time, stop_time, total_time;
 
   alice_state_t state;
   alice_state_null(state);
@@ -656,13 +827,14 @@ int main(void)
     exit(1);
   }
 
-  void *socket = zmq_socket(context, ZMQ_REP);
+  printf("Connecting to Tumbler...\n\n");
+  void *socket = zmq_socket(context, ZMQ_REQ);
   if (!socket) {
     fprintf(stderr, "Error: could not create a socket.\n");
     exit(1);
   }
 
-  int rc = zmq_bind(socket, ALICE_ENDPOINT);
+  int rc = zmq_connect(socket, TUMBLER_ENDPOINT);
   if (rc != 0) {
     fprintf(stderr, "Error: could not bind the socket.\n");
     exit(1);
@@ -677,11 +849,16 @@ int main(void)
 
     if (read_keys_from_file_alice_bob(ALICE_KEY_FILE_PREFIX,
                                       state->keys,
-                                      state->tumbler_cl_pk) != RLC_OK) {
-        RLC_THROW(ERR_CAUGHT);
+                                      state->tumbler_cl_pk,
+                                      state->tumbler_ps_pk) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
     }
 
-    while (!PUZZLE_SHARED) {
+    if (setup(state, socket) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    while (!SETUP_COMPLETED) {
       if (receive_message(state, socket) != RLC_OK) {
         RLC_THROW(ERR_CAUGHT);
       }
@@ -690,41 +867,7 @@ int main(void)
     rc = zmq_close(socket);
     if (rc != 0) {
       fprintf(stderr, "Error: could not close the socket.\n");
-      RLC_THROW(ERR_CAUGHT);
-    }
-
-    printf("Connecting to Tumbler...\n\n");
-    socket = zmq_socket(context, ZMQ_REQ);
-    if (!socket) {
-      fprintf(stderr, "Error: could not create a socket.\n");
       exit(1);
-    }
-
-    rc = zmq_connect(socket, TUMBLER_ENDPOINT);
-    if (rc != 0) {
-      fprintf(stderr, "Error: could not connect to Tumbler.\n");
-      RLC_THROW(ERR_CAUGHT);
-    }
-
-    start_time = ttimer();
-    if (payment_init(socket) != RLC_OK) {
-      RLC_THROW(ERR_CAUGHT);
-    }
-
-    while (!PUZZLE_SOLVED) {
-      if (receive_message(state, socket) != RLC_OK) {
-        RLC_THROW(ERR_CAUGHT);
-      }
-    }
-
-    stop_time = ttimer();
-    total_time = stop_time - start_time;
-    printf("\nPuzzle solver time: %.5f sec\n", total_time / CLOCK_PRECISION);
-
-    rc = zmq_close(socket);
-    if (rc != 0) {
-      fprintf(stderr, "Error: could not close the socket.\n");
-      RLC_THROW(ERR_CAUGHT);
     }
 
     printf("Connecting to Bob...\n\n");
@@ -737,10 +880,91 @@ int main(void)
     rc = zmq_connect(socket, BOB_ENDPOINT);
     if (rc != 0) {
       fprintf(stderr, "Error: could not connect to Bob.\n");
+      exit(1);
+    }
+
+    if (token_share(state, socket) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
 
-    if (puzzle_solution_send(state, socket) != RLC_OK) {
+    rc = zmq_close(socket);
+    if (rc != 0) {
+      fprintf(stderr, "Error: could not close the socket.\n");
+      exit(1);
+    }
+
+    socket = zmq_socket(context, ZMQ_REP);
+    if (!socket) {
+      fprintf(stderr, "Error: could not create a socket.\n");
+      exit(1);
+    }
+
+    rc = zmq_bind(socket, ALICE_ENDPOINT);
+    if (rc != 0) {
+      fprintf(stderr, "Error: could not bind the socket.\n");
+      exit(1);
+    }
+
+    while (!PUZZLE_SHARED) {
+      if (receive_message(state, socket) != RLC_OK) {
+        RLC_THROW(ERR_CAUGHT);
+      }
+    }
+
+    rc = zmq_close(socket);
+    if (rc != 0) {
+      fprintf(stderr, "Error: could not close the socket.\n");
+      exit(1);
+    }
+
+    printf("Connecting to Tumbler...\n\n");
+    socket = zmq_socket(context, ZMQ_REQ);
+    if (!socket) {
+      fprintf(stderr, "Error: could not create a socket.\n");
+      exit(1);
+    }
+
+    rc = zmq_connect(socket, TUMBLER_ENDPOINT);
+    if (rc != 0) {
+      fprintf(stderr, "Error: could not connect to Tumbler.\n");
+      exit(1);
+    }
+
+    start_time = ttimer();
+    if (payment_init(socket) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    while (!PUZZLE_SOLVED) {
+      if (receive_message(state, socket) != RLC_OK) {
+        RLC_THROW(ERR_CAUGHT);
+      }
+    }
+    
+    stop_time = ttimer();
+    total_time = stop_time - start_time;
+    printf("\nPuzzle solver time: %.5f sec\n", total_time / CLOCK_PRECISION);
+
+    rc = zmq_close(socket);
+    if (rc != 0) {
+      fprintf(stderr, "Error: could not close the socket.\n");
+      exit(1);
+    }
+
+    printf("Connecting to Bob...\n\n");
+    socket = zmq_socket(context, ZMQ_REQ);
+    if (!socket) {
+      fprintf(stderr, "Error: could not create a socket.\n");
+      exit(1);
+    }
+
+    rc = zmq_connect(socket, BOB_ENDPOINT);
+    if (rc != 0) {
+      fprintf(stderr, "Error: could not connect to Bob.\n");
+      exit(1);
+    }
+
+    if (puzzle_solution_share(state, socket) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
   } RLC_CATCH_ANY {

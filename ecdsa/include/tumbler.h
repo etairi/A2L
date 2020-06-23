@@ -12,6 +12,7 @@
 static uint8_t tx[2] = { 116, 120 }; // "tx"
 
 typedef enum {
+  SETUP,
   PROMISE_INIT,
   PROMISE_SIGN,
   PROMISE_END,
@@ -26,6 +27,7 @@ typedef struct {
 } symstruct_t;
 
 static symstruct_t msg_lookuptable[] = {
+  { "setup", SETUP },
   { "promise_init", PROMISE_INIT },
   { "promise_sign", PROMISE_SIGN },
   { "promise_end", PROMISE_END },
@@ -44,6 +46,8 @@ typedef struct {
   cl_public_key_t cl_pk_bob;
   cl_ciphertext_t ctx_ec_sk_alice;
   cl_ciphertext_t ctx_ec_sk_bob;
+  ps_secret_key_t ps_sk;
+  ps_public_key_t ps_pk;
   bn_t alpha;
   ec_t g_to_the_alpha;
   cl_ciphertext_t ctx_alpha;
@@ -69,7 +73,7 @@ typedef tumbler_state_st *tumbler_state_t;
   do {                                                    \
     state = malloc(sizeof(tumbler_state_st));             \
     if (state == NULL) {                                  \
-      RLC_THROW(ERR_NO_MEMORY);                               \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                     \
     keys_new((state)->keys_alice);                        \
     keys_new((state)->keys_bob);                          \
@@ -78,6 +82,8 @@ typedef tumbler_state_st *tumbler_state_t;
     cl_public_key_new((state)->cl_pk_bob);                \
     cl_ciphertext_new((state)->ctx_ec_sk_alice);          \
     cl_ciphertext_new((state)->ctx_ec_sk_bob);            \
+    ps_secret_key_new((state)->ps_sk);                    \
+    ps_public_key_new((state)->ps_pk);                    \
     bn_new((state)->alpha);                               \
     ec_new((state)->g_to_the_alpha);                      \
     cl_ciphertext_new((state)->ctx_alpha);                \
@@ -104,6 +110,8 @@ typedef tumbler_state_st *tumbler_state_t;
     cl_public_key_free((state)->cl_pk_bob);               \
     cl_ciphertext_free((state)->ctx_ec_sk_alice);         \
     cl_ciphertext_free((state)->ctx_ec_sk_bob);           \
+    ps_secret_key_free((state)->ps_sk);                   \
+    ps_public_key_free((state)->ps_pk);                   \
     bn_free((state)->alpha);                              \
     ec_free((state)->g_to_the_alpha);                     \
     cl_ciphertext_free((state)->ctx_alpha);               \
@@ -130,6 +138,7 @@ msg_handler_t get_message_handler(char *key);
 int handle_message(tumbler_state_t state, void *socket, zmq_msg_t message);
 int receive_message(tumbler_state_t state, void *socket);
 
+int setup_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data);

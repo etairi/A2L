@@ -1,3 +1,4 @@
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -36,6 +37,7 @@ int main(int argc, char *argv[]) {
   } else if (bob > 0) {
     int status;
     waitpid(bob, &status, 0);
+    kill(tumbler, SIGINT);
   } else {
     char *args[] = { "./bob", NULL };
     char *env[] = { NULL };

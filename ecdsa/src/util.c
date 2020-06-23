@@ -14,6 +14,12 @@ int init() {
     return RLC_ERR;
   }
 
+	// Initialize the pairing and elliptic curve groups.
+	if (pc_param_set_any() != RLC_OK) {
+		core_clean();
+		return RLC_ERR;
+	}
+
   if (ec_param_set_any() != RLC_OK) {
     core_clean();
     return RLC_ERR;
@@ -22,8 +28,9 @@ int init() {
 	// Set the secp256k1 curve, which is used in Bitcoin.
 	ep_param_set(SECG_K256);
 
-	// Initialize the PARI stack (in bytes).
+	// Initialize the PARI stack (in bytes) and randomness.
 	pari_init(10000000, 2);
+	setrand(getwalltime());
 	
 	return RLC_OK;
 }
@@ -97,12 +104,17 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 	cl_public_key_t pk_alice, pk_bob;
 	cl_ciphertext_t ctx_ec_sk_alice, ctx_ec_sk_bob;
 
-	bn_t q, ec_sk_alice, ec_sk_bob, ec_sk_tumbler;
+	bn_t q, x, y, ec_sk_alice, ec_sk_bob, ec_sk_tumbler;
 	ec_t ec_pk_alice, ec_pk_bob, ec_pk_tumbler;
 	ec_t ec_pk_alice_tumbler, ec_pk_bob_tumbler;
 
+	ps_secret_key_t ps_sk_tumbler;
+	ps_public_key_t ps_pk_tumbler;
+
 	uint8_t serialized_ec_sk[RLC_BN_SIZE];
 	uint8_t serialized_ec_pk[RLC_EC_SIZE_COMPRESSED];
+	uint8_t serialized_g1[RLC_G1_SIZE_COMPRESSED];
+	uint8_t serialized_g2[RLC_G2_SIZE_COMPRESSED];
 
 	cl_public_key_null(pk_alice);
 	cl_public_key_null(pk_bob);
@@ -110,6 +122,8 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 	cl_ciphertext_null(ctx_ec_sk_bob);
 
 	bn_null(q);
+	bn_null(x);
+	bn_null(y);
 	bn_null(ec_sk_alice);
 	bn_null(ec_sk_bob);
 	bn_null(ec_sk_tumbler);
@@ -120,6 +134,9 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 	ec_null(ec_pk_alice_tumbler);
 	ec_null(ec_pk_bob_tumbler);
 
+	ps_secret_key_null(ps_sk_tumbler);
+	ps_public_key_null(ps_pk_tumbler);
+
 	RLC_TRY {
 		cl_public_key_new(pk_alice);
 		cl_public_key_new(pk_bob);
@@ -127,6 +144,8 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		cl_ciphertext_new(ctx_ec_sk_bob);
 
 		bn_new(q);
+		bn_new(x);
+		bn_new(y);
 		bn_new(ec_sk_alice);
 		bn_new(ec_sk_bob);
 		bn_new(ec_sk_tumbler);
@@ -136,6 +155,9 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		ec_new(ec_pk_tumbler);
 		ec_new(ec_pk_alice_tumbler);
 		ec_new(ec_pk_bob_tumbler);
+
+		ps_secret_key_new(ps_sk_tumbler);
+		ps_public_key_new(ps_pk_tumbler);
 
 		// Compute EC public and secret keys.
 		ec_curve_get_ord(q);
@@ -181,6 +203,16 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		if (cl_enc(ctx_ec_sk_bob, plain_ec_sk_bob, pk_bob, params) != RLC_OK) {
 			RLC_THROW(ERR_CAUGHT);
 		}
+
+		// Compute PS public and secret keys.
+		pc_get_ord(q);
+		bn_rand_mod(x, q);
+		bn_rand_mod(y, q);
+
+		g1_mul_gen(ps_sk_tumbler->X_1, x);
+		g1_mul_gen(ps_pk_tumbler->Y_1, y);
+		g2_mul_gen(ps_pk_tumbler->X_2, x);
+		g2_mul_gen(ps_pk_tumbler->Y_2, y);
 
 		// Create the filenames for the keys.
 		unsigned alice_key_file_length = strlen(ALICE_KEY_FILE_PREFIX) + strlen(KEY_FILE_EXTENSION) + 10;
@@ -262,6 +294,17 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		fwrite(GENtostr(ctx_ec_sk_bob->c1), sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file);
 		fwrite(GENtostr(ctx_ec_sk_bob->c2), sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file);
 
+		g1_write_bin(serialized_g1, RLC_G1_SIZE_COMPRESSED, ps_sk_tumbler->X_1, 1);
+		fwrite(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file);
+		memzero(serialized_g1, RLC_G1_SIZE_COMPRESSED);
+		g1_write_bin(serialized_g1, RLC_G1_SIZE_COMPRESSED, ps_pk_tumbler->Y_1, 1);
+		fwrite(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file);
+		g2_write_bin(serialized_g2, RLC_G2_SIZE_COMPRESSED, ps_pk_tumbler->X_2, 1);
+		fwrite(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file);
+		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
+		g2_write_bin(serialized_g2, RLC_G2_SIZE_COMPRESSED, ps_pk_tumbler->Y_2, 1);
+		fwrite(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file);
+
 		fclose(file);
 
 		free(alice_key_file_name);
@@ -276,6 +319,8 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		cl_ciphertext_free(ctx_ec_sk_bob);
 
 		bn_free(q);
+		bn_free(x);
+		bn_free(y);
 		bn_free(ec_sk_alice);
 		bn_free(ec_sk_bob);
 		bn_free(ec_sk_tumbler);
@@ -285,6 +330,9 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		ec_free(ec_pk_tumbler);
 		ec_free(ec_pk_alice_tumbler);
 		ec_free(ec_pk_bob_tumbler);
+
+		ps_secret_key_free(ps_sk_tumbler);
+		ps_public_key_free(ps_pk_tumbler);
 	}
 
 	return result_status;
@@ -292,13 +340,16 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 
 int read_keys_from_file_alice_bob(const char *name,
 																	keys_t keys,
-																	cl_public_key_t tumbler_cl_public_key) {
+																	cl_public_key_t tumbler_cl_public_key,
+																	ps_public_key_t tumbler_ps_public_key) {
 	int result_status = RLC_OK;
 
 	uint8_t serialized_ec_sk[RLC_BN_SIZE];
 	uint8_t serialized_ec_pk[RLC_EC_SIZE_COMPRESSED];
 	char serialized_cl_sk[RLC_CL_SECRET_KEY_SIZE];
 	char serialized_cl_pk[RLC_CL_PUBLIC_KEY_SIZE];
+	uint8_t serialized_g1[RLC_G1_SIZE_COMPRESSED];
+	uint8_t serialized_g2[RLC_G2_SIZE_COMPRESSED];
 
 	RLC_TRY {
 		unsigned key_file_length = strlen(name) + strlen(KEY_FILE_EXTENSION) + 10;
@@ -360,6 +411,23 @@ int read_keys_from_file_alice_bob(const char *name,
 		}
 		tumbler_cl_public_key->pk = gp_read_str(serialized_cl_pk);
 
+		fseek(file, (2 * RLC_CL_PUBLIC_KEY_SIZE) + (4 * RLC_CL_CIPHERTEXT_SIZE) + RLC_G1_SIZE_COMPRESSED, SEEK_CUR);
+		if (fread(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file) != RLC_G1_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g1_read_bin(tumbler_ps_public_key->Y_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
+
+		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g2_read_bin(tumbler_ps_public_key->X_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
+		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
+
+		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g2_read_bin(tumbler_ps_public_key->Y_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
+
 		fclose(file);
 		free(key_file_name);
 	} RLC_CATCH_ANY {
@@ -374,7 +442,9 @@ int read_keys_from_file_tumbler(keys_t keys_alice,
 																cl_public_key_t cl_public_key_alice,
 																cl_public_key_t cl_public_key_bob,
 																cl_ciphertext_t cl_ctx_ec_sk_alice,
-																cl_ciphertext_t cl_ctx_ec_sk_bob) {
+																cl_ciphertext_t cl_ctx_ec_sk_bob,
+																ps_secret_key_t ps_sk,
+																ps_public_key_t ps_pk) {
 	int result_status = RLC_OK;
 
 	uint8_t serialized_ec_sk[RLC_BN_SIZE];
@@ -382,6 +452,8 @@ int read_keys_from_file_tumbler(keys_t keys_alice,
 	char serialized_cl_sk[RLC_CL_SECRET_KEY_SIZE];
 	char serialized_cl_pk[RLC_CL_PUBLIC_KEY_SIZE];
 	char serialized_cl_ct[RLC_CL_CIPHERTEXT_SIZE];
+	uint8_t serialized_g1[RLC_G1_SIZE_COMPRESSED];
+	uint8_t serialized_g2[RLC_G2_SIZE_COMPRESSED];
 
 	RLC_TRY {
 		unsigned key_file_length = strlen(TUMBLER_KEY_FILE_PREFIX) + strlen(KEY_FILE_EXTENSION) + 10;
@@ -461,6 +533,28 @@ int read_keys_from_file_tumbler(keys_t keys_alice,
 			RLC_THROW(ERR_CAUGHT);
 		}
 		cl_ctx_ec_sk_bob->c2 = gp_read_str(serialized_cl_ct);
+
+		if (fread(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file) != RLC_G1_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g1_read_bin(ps_sk->X_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
+		memzero(serialized_g1, RLC_G1_SIZE_COMPRESSED);
+
+		if (fread(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file) != RLC_G1_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g1_read_bin(ps_pk->Y_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
+
+		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g2_read_bin(ps_pk->X_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
+		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
+
+		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g2_read_bin(ps_pk->Y_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
 		
 		fclose(file);
 		free(key_file_name);
@@ -551,6 +645,176 @@ int cl_dec(GEN *plaintext,
   return result_status;
 }
 
+int ps_blind_sign(ps_signature_t signature,
+									const pedersen_com_t com, 
+									const ps_secret_key_t secret_key) {
+	int result_status = RLC_OK;
+
+	bn_t q, u;
+	bn_null(q);
+	bn_null(u);
+
+	g1_t g1_gen, x_1_times_c;
+	g1_null(g1_gen);
+	g1_null(x_1_times_c);
+
+	RLC_TRY {
+		bn_new(q);
+		bn_new(u);
+		g1_new(g1_gen);
+		g1_new(x_1_times_c);
+
+		g1_get_gen(g1_gen);
+		g1_get_ord(q);
+		bn_rand_mod(u, q);
+
+		g1_mul(signature->sigma_1, g1_gen, u);
+		g1_add(x_1_times_c, secret_key->X_1, com->c);
+		g1_norm(x_1_times_c, x_1_times_c);
+		g1_mul(signature->sigma_2, x_1_times_c, u);
+	}
+	RLC_CATCH_ANY {
+		result_status = RLC_ERR;
+	} RLC_FINALLY {
+		bn_free(q);
+		bn_free(u);
+		g1_free(g1_gen);
+		g1_free(x_1_times_c);
+	}
+
+	return result_status;
+}
+
+int ps_unblind(ps_signature_t signature,
+							 const pedersen_decom_t decom) {
+	int result_status = RLC_OK;
+
+	bn_t q, x, r_inverse;
+	bn_null(q);
+	bn_null(x);
+	bn_null(r_inverse);
+
+	g1_t sigma_1_to_the_r_inverse;
+	g1_null(sigma_1_to_the_r_inverse);
+
+	RLC_TRY {
+		bn_new(q);
+		bn_new(x);
+		bn_new(r_inverse);
+		g1_new(sigma_1_to_the_r_inverse);
+
+		g1_get_ord(q);
+
+		bn_gcd_ext(x, r_inverse, NULL, decom->r, q);
+    if (bn_sign(r_inverse) == RLC_NEG) {
+      bn_add(r_inverse, r_inverse, q);
+    }
+
+		g1_mul(sigma_1_to_the_r_inverse, signature->sigma_1, r_inverse);
+		g1_add(signature->sigma_2, signature->sigma_2, sigma_1_to_the_r_inverse);
+		g1_norm(signature->sigma_2, signature->sigma_2);
+	}
+	RLC_CATCH_ANY {
+		result_status = RLC_ERR;
+	} RLC_FINALLY {
+		bn_free(q);
+		bn_free(x);
+		bn_free(r_inverse);
+		g1_free(sigma_1_to_the_r_inverse);
+	}
+
+	return result_status;
+}
+
+int ps_verify(const ps_signature_t signature,
+							bn_t message,
+						 	const ps_public_key_t public_key) {
+	int result_status = RLC_ERR;
+
+	g2_t g2_gen, y_2_to_the_m;
+	g2_t x_2_times_y_2_to_the_m;
+	gt_t pairing_1, pairing_2;
+
+	g2_null(g2_gen);
+	g2_null(y_2_to_the_m);
+	g2_null(x_2_times_y_2_to_the_m);
+	gt_null(pairing_1);
+	gt_null(pairing_2);
+
+	RLC_TRY {
+		g2_new(g2_gen);
+		g2_new(y_2_to_the_m);
+		g2_new(x_2_times_y_2_to_the_m);
+		gt_new(pairing_1);
+		gt_new(pairing_2);
+
+		g2_get_gen(g2_gen);
+
+		g2_mul(y_2_to_the_m, public_key->Y_2, message);
+		g2_add(x_2_times_y_2_to_the_m, public_key->X_2, y_2_to_the_m);
+		g2_norm(x_2_times_y_2_to_the_m, x_2_times_y_2_to_the_m);
+
+		pc_map(pairing_1, signature->sigma_1, x_2_times_y_2_to_the_m);
+		pc_map(pairing_2, signature->sigma_2, g2_gen);
+		if (gt_cmp(pairing_1, pairing_2) == RLC_EQ) {
+			result_status = RLC_OK;
+		}
+	} RLC_CATCH_ANY {
+		result_status = RLC_ERR;
+	} RLC_FINALLY {
+		g2_free(g2_gen);
+		g2_free(y_2_to_the_m);
+		g2_free(x_2_times_y_2_to_the_m);
+		gt_free(pairing_1);
+		gt_free(pairing_2);
+	}
+
+	return result_status;
+}
+
+int pedersen_commit(pedersen_com_t com,
+										pedersen_decom_t decom,
+										g1_t h,
+										bn_t x) {
+	int result_status = RLC_OK;
+
+	bn_t q;
+	bn_null(q);
+	bn_null(r);
+
+	g1_t g1_gen, g1_to_the_r;
+	g1_t h_to_the_x;
+	g1_null(g1_gen);
+	g1_null(g1_to_the_r);
+	g1_null(h_to_the_x);
+
+	RLC_TRY {
+		bn_new(q);
+		g1_new(g1_gen);
+		g1_new(g1_to_the_r);
+		g1_new(h_to_the_x);
+
+		g1_get_gen(g1_gen);
+		g1_get_ord(q);
+		bn_rand_mod(decom->r, q);
+		bn_copy(decom->m, x);
+
+		g1_mul(g1_to_the_r, g1_gen, decom->r);
+		g1_mul(h_to_the_x, h, x);
+		g1_add(com->c, g1_to_the_r, h_to_the_x);
+		g1_norm(com->c, com->c);
+	} RLC_CATCH_ANY {
+		result_status = RLC_ERR;
+	} RLC_FINALLY {
+		bn_free(q);
+		g1_free(g1_gen);
+		g1_free(g1_to_the_r);
+		g1_free(h_to_the_x);
+	}
+
+	return result_status;
+}
+
 int commit(commit_t com, const ec_t x) {
 	int result_status = RLC_OK;
 
@@ -630,6 +894,148 @@ int decommit(const commit_t com, const ec_t x) {
 	} RLC_FINALLY {
 		bn_free(c_prime);
 		bn_free(q);
+	}
+
+	return result_status;
+}
+
+int zk_pedersen_com_prove(pedersen_com_zk_proof_t proof,
+													g1_t h,
+													const pedersen_com_t com,
+													const pedersen_decom_t decom) {
+	int result_status = RLC_OK;
+	
+	const unsigned SERIALIZED_LEN = 2 * RLC_G1_SIZE_COMPRESSED;
+	uint8_t serialized[SERIALIZED_LEN];
+	uint8_t hash[RLC_MD_LEN];
+
+	bn_t q, k, s;
+	bn_null(q);
+	bn_null(k);
+	bn_null(s);
+
+	pedersen_decom_t decom_prime;
+	pedersen_decom_null(decom_prime);
+
+	RLC_TRY {
+		bn_new(q);
+		bn_new(k);
+		bn_new(s);
+		pedersen_decom_new(decom_prime);
+
+		g1_get_ord(q);
+		if (pedersen_commit(proof->c, decom_prime, h, s) != RLC_OK) {
+			RLC_THROW(ERR_CAUGHT);
+		}
+
+		g1_write_bin(serialized, RLC_G1_SIZE_COMPRESSED, com->c, 1);
+		g1_write_bin(serialized + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, proof->c->c, 1);
+		md_map(hash, serialized, SERIALIZED_LEN);
+
+		if (8 * RLC_MD_LEN > bn_bits(q)) {
+			unsigned len = RLC_CEIL(bn_bits(q), 8);
+			bn_read_bin(k, hash, len);
+			bn_rsh(k, k, 8 * RLC_MD_LEN - bn_bits(q));
+		} else {
+			bn_read_bin(k, hash, RLC_MD_LEN);
+		}
+		bn_mod(k, k, q);
+
+		bn_mul(proof->u, k, decom->r);
+		bn_mod(proof->u, proof->u, q);
+		bn_add(proof->u, proof->u, decom_prime->r);
+		bn_mod(proof->u, proof->u, q);
+
+		bn_mul(proof->v, k, decom->m);
+		bn_mod(proof->v, proof->v, q);
+		bn_add(proof->v, proof->v, s);
+		bn_mod(proof->v, proof->v, q);
+	} RLC_CATCH_ANY {
+		result_status = RLC_ERR;
+	} RLC_FINALLY {
+		bn_free(q);
+		bn_free(k);
+		bn_free(s);
+		pedersen_decom_free(decom_prime);
+	}
+
+	return result_status;
+}
+
+int zk_pedersen_com_verify(const pedersen_com_zk_proof_t proof,
+													 g1_t h,
+													 const pedersen_com_t com) {
+	int result_status = RLC_ERR;
+	
+	const unsigned SERIALIZED_LEN = 2 * RLC_G1_SIZE_COMPRESSED;
+	uint8_t serialized[SERIALIZED_LEN];
+	uint8_t hash[RLC_MD_LEN];
+
+	bn_t q, k;
+	g1_t g1_gen;
+	g1_t g_to_the_u, h_to_the_v;
+	g1_t g_to_the_u_times_h_to_the_v;
+	g1_t com_to_the_k;
+	g1_t com_prime_times_com_to_the_k;
+
+	bn_null(q);
+	bn_null(k);
+	g1_null(g1_gen);
+	g1_null(g_to_the_u);
+	g1_null(h_to_the_v);
+	g1_null(g_to_the_u_times_h_to_the_v);
+	g1_null(com_to_the_k);
+	g1_null(com_prime_times_com_to_the_k);
+
+	RLC_TRY {
+		bn_new(q);
+		bn_new(k);
+		g1_new(g1_gen);
+		g1_new(g_to_the_u);
+		g1_new(h_to_the_v);
+		g1_new(g_to_the_u_times_h_to_the_v);
+		g1_new(com_to_the_k);
+		g1_new(com_prime_times_com_to_the_k);
+
+		g1_get_gen(g1_gen);
+		g1_get_ord(q);
+
+		g1_write_bin(serialized, RLC_G1_SIZE_COMPRESSED, com->c, 1);
+		g1_write_bin(serialized + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, proof->c->c, 1);
+		md_map(hash, serialized, SERIALIZED_LEN);
+
+		if (8 * RLC_MD_LEN > bn_bits(q)) {
+			unsigned len = RLC_CEIL(bn_bits(q), 8);
+			bn_read_bin(k, hash, len);
+			bn_rsh(k, k, 8 * RLC_MD_LEN - bn_bits(q));
+		} else {
+			bn_read_bin(k, hash, RLC_MD_LEN);
+		}
+		bn_mod(k, k, q);
+
+		g1_mul(g_to_the_u, g1_gen, proof->u);
+		g1_mul(h_to_the_v, h, proof->v);
+		g1_add(g_to_the_u_times_h_to_the_v, g_to_the_u, h_to_the_v);
+		g1_norm(g_to_the_u_times_h_to_the_v, g_to_the_u_times_h_to_the_v);
+
+		g1_mul(com_to_the_k, com->c, k);
+		g1_add(com_prime_times_com_to_the_k, proof->c->c, com_to_the_k);
+		g1_norm(com_prime_times_com_to_the_k, com_prime_times_com_to_the_k);
+
+		if (g1_cmp(g_to_the_u_times_h_to_the_v, com_prime_times_com_to_the_k) == RLC_EQ) {
+			result_status = RLC_OK;
+		}
+	} RLC_CATCH_ANY {
+		result_status = RLC_ERR;
+	} RLC_FINALLY {
+		bn_free(q);
+		bn_free(k);
+		g1_free(g1_gen);
+		g1_free(g_to_the_u);
+		g1_free(h_to_the_v);
+		g1_free(g_to_the_u_times_h_to_the_v);
+		g1_free(com_to_the_k);
+		g1_free(com_prime_times_com_to_the_k);
 	}
 
 	return result_status;
