@@ -28,8 +28,9 @@ int init() {
 	// Set the secp256k1 curve, which is used in Bitcoin.
 	ep_param_set(SECG_K256);
 
-	// Initialize the PARI stack (in bytes).
+	// Initialize the PARI stack (in bytes) and randomness.
 	pari_init(10000000, 2);
+	setrand(getwalltime());
 	
 	return RLC_OK;
 }
