@@ -212,18 +212,8 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		fwrite(GENtostr(cl_sk_alice), sizeof(char), RLC_CL_SECRET_KEY_SIZE, file);
     fwrite(GENtostr(cl_pk_alice), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
 
-		g1_write_bin(serialized_g1, RLC_G1_SIZE_COMPRESSED, ps_pk_tumbler->Y_1, 1);
-		fwrite(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file);
-		g2_write_bin(serialized_g2, RLC_G2_SIZE_COMPRESSED, ps_pk_tumbler->X_2, 1);
-		fwrite(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file);
-		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
-		g2_write_bin(serialized_g2, RLC_G2_SIZE_COMPRESSED, ps_pk_tumbler->Y_2, 1);
-		fwrite(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file);
-
 		memzero(serialized_ec_sk, RLC_BN_SIZE);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
-		memzero(serialized_g1, RLC_G1_SIZE_COMPRESSED);
-		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
 
 		fclose(file);
 
@@ -241,18 +231,8 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		fwrite(GENtostr(cl_sk_bob), sizeof(char), RLC_CL_SECRET_KEY_SIZE, file);
     fwrite(GENtostr(cl_pk_bob), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
 
-		g1_write_bin(serialized_g1, RLC_G1_SIZE_COMPRESSED, ps_pk_tumbler->Y_1, 1);
-		fwrite(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file);
-		g2_write_bin(serialized_g2, RLC_G2_SIZE_COMPRESSED, ps_pk_tumbler->X_2, 1);
-		fwrite(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file);
-		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
-		g2_write_bin(serialized_g2, RLC_G2_SIZE_COMPRESSED, ps_pk_tumbler->Y_2, 1);
-		fwrite(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file);
-
 		memzero(serialized_ec_sk, RLC_BN_SIZE);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
-		memzero(serialized_g1, RLC_G1_SIZE_COMPRESSED);
-		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
 
 		fclose(file);
 
@@ -365,22 +345,6 @@ int read_keys_from_file_alice_bob(const char *name,
 		keys->cl_pk->pk = gp_read_str(serialized_cl_pk);
 		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
 
-		if (fread(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file) != RLC_G1_SIZE_COMPRESSED) {
-			RLC_THROW(ERR_NO_READ);
-		}
-		g1_read_bin(tumbler_ps_public_key->Y_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
-
-		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
-			RLC_THROW(ERR_NO_READ);
-		}
-		g2_read_bin(tumbler_ps_public_key->X_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
-		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
-
-		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
-			RLC_THROW(ERR_NO_READ);
-		}
-		g2_read_bin(tumbler_ps_public_key->Y_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
-
 		fclose(file);
 		free(key_file_name);
 
@@ -403,6 +367,23 @@ int read_keys_from_file_alice_bob(const char *name,
 			RLC_THROW(ERR_NO_READ);
 		}
 		tumbler_cl_public_key->pk = gp_read_str(serialized_cl_pk);
+
+		fseek(file, (2 * RLC_CL_PUBLIC_KEY_SIZE) + RLC_G1_SIZE_COMPRESSED, SEEK_CUR);
+		if (fread(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file) != RLC_G1_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g1_read_bin(tumbler_ps_public_key->Y_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
+
+		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g2_read_bin(tumbler_ps_public_key->X_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
+		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
+
+		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		g2_read_bin(tumbler_ps_public_key->Y_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
 
 		fclose(file);
 		free(key_file_name);
