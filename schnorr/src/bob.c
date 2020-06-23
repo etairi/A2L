@@ -12,6 +12,7 @@
 unsigned PROMISE_COMPLETED;
 unsigned PUZZLE_SHARED;
 unsigned PUZZLE_SOLVED;
+unsigned TOKEN_RECEIVED;
 
 int get_message_type(char *key) {
   for (size_t i = 0; i < TOTAL_MESSAGES; i++) {
@@ -26,6 +27,9 @@ int get_message_type(char *key) {
 msg_handler_t get_message_handler(char *key) {
   switch (get_message_type(key))
   {
+    case TOKEN_SHARE:
+      return token_share_handler;
+    
     case PROMISE_INIT_DONE:
       return promise_init_done_handler;
     case PROMISE_SIGN_DONE:
@@ -96,7 +100,32 @@ int receive_message(bob_state_t state, void *socket) {
   return result_status;
 }
 
-int promise_init(void *socket) {
+int token_share_handler(bob_state_t state, void *socet, uint8_t *data) {
+  if (state == NULL || data == NULL) {
+    RLC_THROW(ERR_NO_VALID);
+  }
+
+  int result_status = RLC_OK;
+
+  RLC_TRY {    
+    // Deserialize the data from the message.
+    bn_read_bin(state->tid, data, RLC_BN_SIZE);
+    g1_read_bin(state->sigma->sigma_1, data + RLC_BN_SIZE, RLC_G1_SIZE_COMPRESSED);
+    g1_read_bin(state->sigma->sigma_2, data + RLC_BN_SIZE + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED);
+
+    TOKEN_RECEIVED = 1;
+  } RLC_CATCH_ANY {
+    result_status = RLC_ERR;
+  }
+
+  return result_status;
+}
+
+int promise_init(bob_state_t state, void *socket) {
+  if (state == NULL) {
+    RLC_THROW(ERR_NO_VALID);
+  }
+
   int result_status = RLC_OK;
   uint8_t *serialized_message = NULL;
   
@@ -107,11 +136,15 @@ int promise_init(void *socket) {
     // Build and define the message.
     char *msg_type = "promise_init";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = 0;
+    const unsigned msg_data_length = (2 * RLC_G1_SIZE_COMPRESSED) + RLC_BN_SIZE;
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(promise_init_msg, msg_type_length, msg_data_length);
     
     // Serialize the message.
+    bn_write_bin(promise_init_msg->data, RLC_BN_SIZE, state->tid);
+    g1_write_bin(promise_init_msg->data + RLC_BN_SIZE, RLC_G1_SIZE_COMPRESSED, state->sigma->sigma_1, 1);
+    g1_write_bin(promise_init_msg->data + RLC_BN_SIZE + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, state->sigma->sigma_2, 1);
+
     memcpy(promise_init_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, promise_init_msg, msg_type_length, msg_data_length);
 
@@ -640,28 +673,28 @@ int main(void)
   PROMISE_COMPLETED = 0;
   PUZZLE_SHARED = 0;
   PUZZLE_SOLVED = 0;
+  TOKEN_RECEIVED = 0;
 
   long long start_time, stop_time, total_time;
 
   bob_state_t state;
   bob_state_null(state);
 
-  printf("Connecting to Tumbler...\n\n");
   void *context = zmq_ctx_new();
   if (!context) {
     fprintf(stderr, "Error: could not create a context.\n");
     exit(1);
   }
 
-  void *socket = zmq_socket(context, ZMQ_REQ);
+  void *socket = zmq_socket(context, ZMQ_REP);
   if (!socket) {
     fprintf(stderr, "Error: could not create a socket.\n");
     exit(1);
   }
 
-  int rc = zmq_connect(socket, TUMBLER_ENDPOINT);
+  int rc = zmq_bind(socket, BOB_ENDPOINT);
   if (rc != 0) {
-    fprintf(stderr, "Error: could not connect to Tumbler.\n");
+    fprintf(stderr, "Error: could not bind the socket.\n");
     exit(1);
   }
 
@@ -679,8 +712,33 @@ int main(void)
       RLC_THROW(ERR_CAUGHT);
     }
 
+    while (!TOKEN_RECEIVED) {
+      if (receive_message(state, socket) != RLC_OK) {
+        RLC_THROW(ERR_CAUGHT);
+      }
+    }
+
+    rc = zmq_close(socket);
+    if (rc != 0) {
+      fprintf(stderr, "Error: could not close the socket.\n");
+      exit(1);
+    }
+
+    printf("Connecting to Tumbler...\n\n");
+    socket = zmq_socket(context, ZMQ_REQ);
+    if (!socket) {
+      fprintf(stderr, "Error: could not create a socket.\n");
+      exit(1);
+    }
+
+    rc = zmq_connect(socket, TUMBLER_ENDPOINT);
+    if (rc != 0) {
+      fprintf(stderr, "Error: could not connect to Alice.\n");
+      exit(1);
+    }
+
     start_time = ttimer();
-    if (promise_init(socket) != RLC_OK) {
+    if (promise_init(state, socket) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
 
@@ -696,7 +754,7 @@ int main(void)
     rc = zmq_close(socket);
     if (rc != 0) {
       fprintf(stderr, "Error: could not close the socket.\n");
-      RLC_THROW(ERR_CAUGHT);
+      exit(1);
     }
 
     printf("Connecting to Alice...\n\n");
@@ -709,7 +767,7 @@ int main(void)
     rc = zmq_connect(socket, ALICE_ENDPOINT);
     if (rc != 0) {
       fprintf(stderr, "Error: could not connect to Alice.\n");
-      RLC_THROW(ERR_CAUGHT);
+      exit(1);
     }
 
     if (puzzle_share(state, socket) != RLC_OK) {
@@ -725,7 +783,7 @@ int main(void)
     rc = zmq_close(socket);
     if (rc != 0) {
       fprintf(stderr, "Error: could not close the socket.\n");
-      RLC_THROW(ERR_CAUGHT);
+      exit(1);
     }
 
     socket = zmq_socket(context, ZMQ_REP);
@@ -737,7 +795,7 @@ int main(void)
     rc = zmq_bind(socket, BOB_ENDPOINT);
     if (rc != 0) {
       fprintf(stderr, "Error: could not bind the socket.\n");
-      RLC_THROW(ERR_CAUGHT);
+      exit(1);
     }
 
     while (!PUZZLE_SOLVED) {

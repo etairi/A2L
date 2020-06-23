@@ -12,6 +12,7 @@
 static uint8_t tx[2] = { 116, 120 }; // "tx"
 
 typedef enum {
+  SETUP,
   PROMISE_INIT,
   PROMISE_SIGN,
   PROMISE_END,
@@ -26,6 +27,7 @@ typedef struct {
 } symstruct_t;
 
 static symstruct_t msg_lookuptable[] = {
+  { "setup", SETUP },
   { "promise_init", PROMISE_INIT },
   { "promise_sign", PROMISE_SIGN },
   { "promise_end", PROMISE_END },
@@ -127,6 +129,7 @@ msg_handler_t get_message_handler(char *key);
 int handle_message(tumbler_state_t state, void *socket, zmq_msg_t message);
 int receive_message(tumbler_state_t state, void *socket);
 
+int setup_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data);

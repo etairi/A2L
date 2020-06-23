@@ -123,6 +123,87 @@ typedef commit_st *commit_t;
   } while (0)
 
 typedef struct {
+  g1_t c;
+} pedersen_com_st;
+
+typedef pedersen_com_st *pedersen_com_t;
+
+#define pedersen_com_null(com) com = NULL;
+
+#define pedersen_com_new(com)                 \
+  do {                                        \
+    com = malloc(sizeof(pedersen_com_st));    \
+    if (com == NULL) {                        \
+      RLC_THROW(ERR_NO_MEMORY);               \
+    }                                         \
+    g1_new((com)->c);                         \
+  } while (0)
+
+#define pedersen_com_free(com)                \
+  do {                                        \
+    g1_free((com)->c);                        \
+    free(com);                                \
+    com = NULL;                               \
+  } while (0)
+
+typedef struct {
+  bn_t r;
+  bn_t m;
+} pedersen_decom_st;
+
+typedef pedersen_decom_st *pedersen_decom_t;
+
+#define pedersen_decom_null(decom) decom = NULL;
+
+#define pedersen_decom_new(decom)             \
+  do {                                        \
+    decom = malloc(sizeof(pedersen_decom_st));\
+    if (decom == NULL) {                      \
+      RLC_THROW(ERR_NO_MEMORY);               \
+    }                                         \
+    bn_new((decom)->r);                       \
+    bn_new((decom)->m);                       \
+  } while (0)
+
+#define pedersen_decom_free(decom)            \
+  do {                                        \
+    bn_free((decom)->r);                      \
+    bn_free((decom)->m);                      \
+    free(decom);                              \
+    decom = NULL;                             \
+  } while (0)
+
+typedef struct {
+  pedersen_com_t c;
+  bn_t u;
+  bn_t v;
+} pedersen_com_zk_proof_st;
+
+typedef pedersen_com_zk_proof_st *pedersen_com_zk_proof_t;
+
+#define pedersen_com_zk_proof_null(proof) proof = NULL;
+
+#define pedersen_com_zk_proof_new(proof)              \
+  do {                                                \
+    proof = malloc(sizeof(pedersen_com_zk_proof_st)); \
+    if (proof == NULL) {                              \
+      RLC_THROW(ERR_NO_MEMORY);                       \
+    }                                                 \
+    pedersen_com_new((proof)->c);                     \
+    bn_new((proof)->u);                               \
+    bn_new((proof)->v);                               \
+  } while (0)
+
+#define pedersen_com_zk_proof_free(proof)             \
+  do {                                                \
+    pedersen_com_free((proof)->c);                    \
+    bn_free((proof)->u);                              \
+    bn_free((proof)->v);                              \
+    free(proof);                                      \
+    proof = NULL;                                     \
+  } while (0)
+
+typedef struct {
   GEN Delta_K;  // fundamental discriminant
   GEN E;        // the secp256k1 elliptic curve
   GEN q;        // the order of the elliptic curve
@@ -264,6 +345,33 @@ typedef ec_public_key_st *ec_public_key_t;
     ec_free((public_key)->pk);                        \
     free(public_key);                                 \
     public_key = NULL;                                \
+  } while (0)
+
+typedef struct {
+  g1_t sigma_1;
+  g1_t sigma_2;
+} ps_signature_st;
+
+typedef ps_signature_st *ps_signature_t;
+
+#define ps_signature_null(signature) signature = NULL;
+
+#define ps_signature_new(signature)                   \
+  do {                                                \
+    signature = malloc(sizeof(ps_signature_st));      \
+    if (signature == NULL) {                          \
+      RLC_THROW(ERR_NO_MEMORY);                       \
+    }                                                 \
+    g1_new((signature)->sigma_1);                     \
+    g1_new((signature)->sigma_2);                     \
+  } while (0)
+
+#define ps_signature_free(signature)                  \
+  do {                                                \
+    g1_free((signature)->sigma_1);                    \
+    g1_free((signature)->sigma_2);                    \
+    free(signature);                                  \
+    signature = NULL;                                 \
   } while (0)
 
 typedef struct {
