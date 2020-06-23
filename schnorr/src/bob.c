@@ -32,6 +32,7 @@ msg_handler_t get_message_handler(char *key) {
     
     case PROMISE_INIT_DONE:
       return promise_init_done_handler;
+    
     case PROMISE_SIGN_DONE:
       return promise_sign_done_handler;
 
