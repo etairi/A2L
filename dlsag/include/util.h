@@ -6,9 +6,11 @@
 #include "types.h"
 
 #define RLC_EC_SIZE_COMPRESSED 33
+#define RLC_G1_SIZE_COMPRESSED 33
+#define RLC_G2_SIZE_COMPRESSED 65
 #define RLC_CL_SECRET_KEY_SIZE 290
 #define RLC_CL_PUBLIC_KEY_SIZE 1070
-#define RLC_CL_CIPHERTEXT_SIZE 1550
+#define RLC_CL_CIPHERTEXT_SIZE 1070
 #define RLC_CLDL_PROOF_T1_SIZE 1070
 #define RLC_CLDL_PROOF_T2_SIZE 33
 #define RLC_CLDL_PROOF_T3_SIZE 1070
@@ -40,11 +42,14 @@ int generate_keys_and_write_to_file(const cl_params_t params);
 int read_keys_from_file_alice_bob(const char *name,
 																	keys_t keys,
 																	cl_public_key_t tumbler_cl_public_key,
+																	ps_public_key_t tumbler_ps_public_key,
 																	ring_t ring);
 int read_keys_from_file_tumbler(keys_t keys_alice,
 																keys_t keys_bob,
 																cl_public_key_t cl_public_key_alice,
 																cl_public_key_t cl_public_key_bob,
+																ps_secret_key_t ps_sk,
+																ps_public_key_t ps_pk,
 																ring_t ring);
 
 int generate_cl_params(cl_params_t params);
@@ -57,9 +62,29 @@ int cl_dec(GEN *plaintext,
 					 const cl_secret_key_t secret_key,
 					 const cl_params_t params);
 
+int ps_blind_sign(ps_signature_t signature,
+									const pedersen_com_t com, 
+									const ps_secret_key_t secret_key);
+int ps_unblind(ps_signature_t signature,
+							 const pedersen_decom_t decom);
+int ps_verify(const ps_signature_t signature,
+							bn_t message,
+						 	const ps_public_key_t public_key);
+
+int pedersen_commit(pedersen_com_t com,
+										pedersen_decom_t decom,
+										g1_t h,
+										bn_t x);
 int commit(commit_t com, const ec_t x);
 int decommit(const commit_t com, const ec_t x);
 
+int zk_pedersen_com_prove(pedersen_com_zk_proof_t proof,
+													g1_t h,
+													const pedersen_com_t com,
+													const pedersen_decom_t decom);
+int zk_pedersen_com_verify(const pedersen_com_zk_proof_t proof,
+													 g1_t h,
+													 const pedersen_com_t com);
 int zk_cldl_prove(zk_proof_cldl_t proof,
 									const GEN x,
 									const cl_ciphertext_t ciphertext,

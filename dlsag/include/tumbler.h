@@ -12,6 +12,7 @@
 static uint8_t tx[2] = { 116, 120 }; // "tx"
 
 typedef enum {
+  SETUP,
   PROMISE_INIT,
   PROMISE_SIGN,
   PROMISE_END,
@@ -26,6 +27,7 @@ typedef struct {
 } symstruct_t;
 
 static symstruct_t msg_lookuptable[] = {
+  { "setup", SETUP },
   { "promise_init", PROMISE_INIT },
   { "promise_sign", PROMISE_SIGN },
   { "promise_end", PROMISE_END },
@@ -45,6 +47,8 @@ typedef struct {
   cl_params_t cl_params;
   cl_public_key_t cl_pk_alice;
   cl_public_key_t cl_pk_bob;
+  ps_secret_key_t ps_sk;
+  ps_public_key_t ps_pk;
   bn_t *vec_s;
   bn_t h0;
   bn_t s0;
@@ -69,7 +73,7 @@ typedef tumbler_state_st *tumbler_state_t;
   do {                                                    \
     state = malloc(sizeof(tumbler_state_st));             \
     if (state == NULL) {                                  \
-      RLC_THROW(ERR_NO_MEMORY);                               \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                     \
     ring_new((state)->ring, RING_SIZE);                   \
     keys_new((state)->keys_alice);                        \
@@ -79,9 +83,11 @@ typedef tumbler_state_st *tumbler_state_t;
     cl_params_new((state)->cl_params);                    \
     cl_public_key_new((state)->cl_pk_alice);              \
     cl_public_key_new((state)->cl_pk_bob);                \
+    ps_secret_key_new((state)->ps_sk);                    \
+    ps_public_key_new((state)->ps_pk);                    \
     (state)->vec_s = malloc(sizeof(bn_t) * RING_SIZE);    \
     if ((state)->vec_s == NULL) {                         \
-      RLC_THROW(ERR_NO_MEMORY);                               \
+      RLC_THROW(ERR_NO_MEMORY);                           \
     }                                                     \
     for (size_t i = 0; i < RING_SIZE; i++) {              \
       bn_new((state)->vec_s[i]);                          \
@@ -112,6 +118,8 @@ typedef tumbler_state_st *tumbler_state_t;
     cl_params_free((state)->cl_params);                   \
     cl_public_key_free((state)->cl_pk_alice);             \
     cl_public_key_free((state)->cl_pk_bob);               \
+    ps_secret_key_free((state)->ps_sk);                   \
+    ps_public_key_free((state)->ps_pk);                   \
     for (size_t i = 0; i < RING_SIZE; i++) {              \
       bn_free((state)->vec_s[i]);                         \
     }                                                     \
@@ -141,6 +149,7 @@ msg_handler_t get_message_handler(char *key);
 int handle_message(tumbler_state_t state, void *socket, zmq_msg_t message);
 int receive_message(tumbler_state_t state, void *socket);
 
+int setup_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data);

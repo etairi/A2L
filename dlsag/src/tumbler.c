@@ -22,6 +22,9 @@ int get_message_type(char *key) {
 msg_handler_t get_message_handler(char *key) {
   switch (get_message_type(key))
   {
+    case SETUP:
+      return setup_handler;
+
     case PROMISE_INIT:
       return promise_init_handler;
 
@@ -96,6 +99,85 @@ int receive_message(tumbler_state_t state, void *socket) {
   return result_status;
 }
 
+int setup_handler(tumbler_state_t state, void *socket, uint8_t *data) {
+  if (state == NULL || data == NULL) {
+    RLC_THROW(ERR_NO_VALID);
+  }
+
+  int result_status = RLC_OK;
+
+  message_t setup_done_msg;
+  uint8_t *serialized_message = NULL;
+
+  pedersen_com_t com;
+  pedersen_com_null(com);
+
+  pedersen_com_zk_proof_t com_zk_proof;
+  pedersen_com_zk_proof_null(com_zk_proof);
+
+  ps_signature_t sigma_prime;
+  ps_signature_null(sigma_prime);
+  
+  RLC_TRY {
+    pedersen_com_new(com);
+    pedersen_com_zk_proof_new(com_zk_proof);
+    ps_signature_new(sigma_prime);
+
+    // Deserialize the data from the message.
+    g1_read_bin(com->c, data, RLC_G1_SIZE_COMPRESSED);
+    g1_read_bin(com_zk_proof->c->c, data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED);
+    bn_read_bin(com_zk_proof->u, data + (2 * RLC_G1_SIZE_COMPRESSED), RLC_BN_SIZE);
+    bn_read_bin(com_zk_proof->v, data + (2 * RLC_G1_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE);
+    
+    if (zk_pedersen_com_verify(com_zk_proof, state->ps_pk->Y_1, com) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    if (ps_blind_sign(sigma_prime, com, state->ps_sk) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    // Build and define the message.
+    char *msg_type = "setup_done";
+    const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
+    const unsigned msg_data_length = 2 * RLC_G1_SIZE_COMPRESSED;
+    const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
+    message_new(setup_done_msg, msg_type_length, msg_data_length);
+
+    // Serialize the data for the message.
+    g1_write_bin(setup_done_msg->data, RLC_G1_SIZE_COMPRESSED, sigma_prime->sigma_1, 1);
+    g1_write_bin(setup_done_msg->data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, sigma_prime->sigma_2, 1);
+
+    memcpy(setup_done_msg->type, msg_type, msg_type_length);
+    serialize_message(&serialized_message, setup_done_msg, msg_type_length, msg_data_length);
+
+    // Send the message.
+    zmq_msg_t setup_done;
+    int rc = zmq_msg_init_size(&setup_done, total_msg_length);
+    if (rc < 0) {
+      fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    memcpy(zmq_msg_data(&setup_done), serialized_message, total_msg_length);
+    rc = zmq_msg_send(&setup_done, socket, ZMQ_DONTWAIT);
+    if (rc != total_msg_length) {
+      fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+  } RLC_CATCH_ANY {
+    result_status = RLC_ERR;
+  } RLC_FINALLY {
+    pedersen_com_free(com);
+    pedersen_com_zk_proof_free(com_zk_proof);
+    ps_signature_free(sigma_prime);
+    if (setup_done_msg != NULL) message_free(setup_done_msg);
+    if (serialized_message != NULL) free(serialized_message);
+  }
+
+  return result_status;
+}
+
 int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
     RLC_THROW(ERR_NO_VALID);
@@ -106,31 +188,44 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   message_t promise_init_msg;
   uint8_t *serialized_message = NULL;
 
-  bn_t q;
+  bn_t q, tid;
   ec_t x;
   ec_t pk_to_the_m;
   commit_t com;
   zk_proof_t pi_A;
   zk_proof_cldl_t pi_cldl;
+  ps_signature_t sigma;
   
   message_null(promise_init_msg);
   bn_null(q);
+  bn_null(tid);
   ec_null(x);
   ec_null(pk_to_the_m);
   commit_null(com);
   zk_proof_null(pi_A);
   zk_proof_cldl_null(pi_cldl);
+  ps_signature_null(sigma);
   
   RLC_TRY {
     bn_new(q);
+    bn_new(tid);
     ec_new(x);
     ec_new(pk_to_the_m);
     commit_new(com);
     zk_proof_new(pi_A);
     zk_proof_cldl_new(pi_cldl);
+    ps_signature_new(sigma);
+
+    // Deserialize the data from the message.
+    bn_read_bin(tid, data, RLC_BN_SIZE);
+    g1_read_bin(sigma->sigma_1, data + RLC_BN_SIZE, RLC_G1_SIZE_COMPRESSED);
+    g1_read_bin(sigma->sigma_2, data + RLC_BN_SIZE + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED);
+
+    if (ps_verify(sigma, tid, state->ps_pk) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
 
     ec_curve_get_ord(q);
-
     bn_rand_mod(state->alpha, q);
     ec_mul_gen(state->A, state->alpha);
 
@@ -234,11 +329,13 @@ int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     result_status = RLC_ERR;
   } RLC_FINALLY {
     bn_free(q);
+    bn_free(tid);
     ec_free(x);
     ec_free(pk_to_the_m);
     commit_free(com);
     zk_proof_free(pi_A);
     zk_proof_cldl_free(pi_cldl);
+    ps_signature_free(sigma);
     if (promise_init_msg != NULL) message_free(promise_init_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
@@ -1154,6 +1251,8 @@ int main(void)
                                     state->keys_bob,
                                     state->cl_pk_alice,
                                     state->cl_pk_bob,
+                                    state->ps_sk,
+                                    state->ps_pk,
                                     state->ring) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }

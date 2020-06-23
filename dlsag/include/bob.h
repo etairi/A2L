@@ -14,6 +14,7 @@
 static uint8_t tx[2] = { 116, 120 }; // "tx"
 
 typedef enum {
+  TOKEN_SHARE,
   PROMISE_INIT_DONE,
   PROMISE_SIGN_DONE,
   PROMISE_END_DONE,
@@ -27,6 +28,7 @@ typedef struct {
 } symstruct_t;
 
 static symstruct_t msg_lookuptable[] = {
+  { "token_share", TOKEN_SHARE },
   { "promise_init_done", PROMISE_INIT_DONE },
   { "promise_sign_done", PROMISE_SIGN_DONE },
   { "promise_end_done", PROMISE_END_DONE },
@@ -41,6 +43,7 @@ typedef struct {
   keys_t keys;
   cl_params_t cl_params;
   cl_public_key_t tumbler_cl_pk;
+  ps_public_key_t tumbler_ps_pk;
   bn_t *vec_s;
   bn_t h0;
   bn_t s0;
@@ -54,6 +57,8 @@ typedef struct {
   ec_t J_B_tilde;
   ec_t R_B;
   bn_t beta;
+  bn_t tid;
+  ps_signature_t sigma;
 } bob_state_st;
 
 typedef bob_state_st *bob_state_t;
@@ -64,15 +69,16 @@ typedef bob_state_st *bob_state_t;
   do {                                                      \
     state = malloc(sizeof(bob_state_st));                   \
     if (state == NULL) {                                    \
-      RLC_THROW(ERR_NO_MEMORY);                                 \
+      RLC_THROW(ERR_NO_MEMORY);                             \
     }                                                       \
     ring_new((state)->ring, RING_SIZE);                     \
     keys_new((state)->keys);                                \
     cl_params_new((state)->cl_params);                      \
     cl_public_key_new((state)->tumbler_cl_pk);              \
+    ps_public_key_new((state)->tumbler_ps_pk);              \
     (state)->vec_s = malloc(sizeof(bn_t) * RING_SIZE);      \
     if ((state)->vec_s == NULL) {                           \
-      RLC_THROW(ERR_NO_MEMORY);                                 \
+      RLC_THROW(ERR_NO_MEMORY);                             \
     }                                                       \
     for (size_t i = 0; i < RING_SIZE; i++) {                \
       bn_new((state)->vec_s[i]);                            \
@@ -89,6 +95,8 @@ typedef bob_state_st *bob_state_t;
     ec_new((state)->J_B_tilde);                             \
     ec_new((state)->R_B);                                   \
     bn_new((state)->beta);                                  \
+    bn_new((state)->tid);                                   \
+    ps_signature_new((state)->sigma);                       \
   } while (0)
 
 #define bob_state_free(state)                               \
@@ -97,6 +105,7 @@ typedef bob_state_st *bob_state_t;
     keys_free((state)->keys);                               \
     cl_params_free((state)->cl_params);                     \
     cl_public_key_free((state)->tumbler_cl_pk);             \
+    ps_public_key_free((state)->tumbler_ps_pk);             \
     for (size_t i = 0; i < RING_SIZE; i++) {                \
       bn_free((state)->vec_s[i]);                           \
     }                                                       \
@@ -113,6 +122,8 @@ typedef bob_state_st *bob_state_t;
     ec_free((state)->J_B_tilde);                            \
     ec_free((state)->R_B);                                  \
     bn_free((state)->beta);                                 \
+    bn_free((state)->tid);                                  \
+    ps_signature_free((state)->sigma);                      \
     free(state);                                            \
     state = NULL;                                           \
   } while (0)
@@ -124,7 +135,8 @@ msg_handler_t get_message_handler(char *key);
 int handle_message(bob_state_t state, void *socket, zmq_msg_t message);
 int receive_message(bob_state_t state, void *socket);
 
-int promise_init(void *socket);
+int token_share_handler(bob_state_t state, void *socet, uint8_t *data);
+int promise_init(bob_state_t state, void *socket);
 int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data);
 int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data);
 int promise_end_done_handler(bob_state_t state, void *socket, uint8_t *data);
