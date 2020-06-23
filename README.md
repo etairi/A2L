@@ -7,7 +7,7 @@ A2L [1] is a secure, privacy-preserving, interoperable, and fungibility-preservi
 * [CMake](https://cmake.org/download/) >= 3.12
 * [ZeroMQ](https://github.com/zeromq/libzmq)
 * [GMP](https://gmplib.org/) >= 6.1.2
-* [RELIC](https://github.com/relic-toolkit/relic) (configured with `-DBN_PRECI=4096` and `-DARITH=gmp`)
+* [RELIC](https://github.com/relic-toolkit/relic) (configured with `-DARITH=gmp`)
 * [PARI/GP](https://pari.math.u-bordeaux.fr/) >= 2.11.2
 
 ## Warning
