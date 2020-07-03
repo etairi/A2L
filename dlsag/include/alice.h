@@ -43,6 +43,7 @@ static symstruct_t msg_lookuptable[] = {
 typedef struct {
   ring_t ring;
   keys_t keys;
+  cl_params_t cl_params;
   cl_public_key_t tumbler_cl_pk;
   ps_public_key_t tumbler_ps_pk;
   bn_t *vec_s;
@@ -76,6 +77,7 @@ typedef alice_state_st *alice_state_t;
     }                                                       \
     ring_new((state)->ring, RING_SIZE);                     \
     keys_new((state)->keys);                                \
+    cl_params_new((state)->cl_params);                      \
     cl_public_key_new((state)->tumbler_cl_pk);              \
     ps_public_key_new((state)->tumbler_ps_pk);              \
     (state)->vec_s = malloc(sizeof(bn_t) * RING_SIZE);      \
@@ -107,6 +109,7 @@ typedef alice_state_st *alice_state_t;
   do {                                                      \
     ring_free((state)->ring, RING_SIZE);                    \
     keys_free((state)->keys);                               \
+    cl_params_free((state)->cl_params);                     \
     cl_public_key_free((state)->tumbler_cl_pk);             \
     ps_public_key_free((state)->tumbler_ps_pk);             \
     for (size_t i = 0; i < RING_SIZE; i++) {                \

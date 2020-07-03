@@ -42,6 +42,7 @@ static symstruct_t msg_lookuptable[] = {
 
 typedef struct {
   keys_t keys;
+  cl_params_t cl_params;
   cl_public_key_t tumbler_cl_pk;
   ps_public_key_t tumbler_ps_pk;
   commit_t com;
@@ -71,6 +72,7 @@ typedef alice_state_st *alice_state_t;
       RLC_THROW(ERR_NO_MEMORY);                             \
     }                                                       \
     keys_new((state)->keys);                                \
+    cl_params_new((state)->cl_params);                      \
     cl_public_key_new((state)->tumbler_cl_pk);              \
     ps_public_key_new((state)->tumbler_ps_pk);              \
     commit_new((state)->com);                               \
@@ -92,6 +94,7 @@ typedef alice_state_st *alice_state_t;
 #define alice_state_free(state)                             \
   do {                                                      \
     keys_free((state)->keys);                               \
+    cl_params_free((state)->cl_params);                     \
     cl_public_key_free((state)->tumbler_cl_pk);             \
     ps_public_key_free((state)->tumbler_ps_pk);             \
     commit_free((state)->com);                              \

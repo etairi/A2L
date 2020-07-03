@@ -401,7 +401,10 @@ int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     }
 
     // Homomorphically randomize the challenge ciphertext.
-    bn_rand_mod(state->tau, q);
+    GEN tau_prime = randomi(state->cl_params->bound);
+    bn_read_str(state->tau, GENtostr(tau_prime), strlen(GENtostr(tau_prime)), 10);
+    bn_mod(state->tau, state->tau, q);
+    
     const unsigned tau_str_len = bn_size_str(state->tau, 10);
     char tau_str[tau_str_len];
     bn_write_str(tau_str, tau_str_len, state->tau, 10);

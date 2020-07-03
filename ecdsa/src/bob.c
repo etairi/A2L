@@ -508,7 +508,10 @@ int puzzle_share(bob_state_t state, void *socket) {
     ec_curve_get_ord(q);
 
     // Randomize the promise challenge.
-    bn_rand_mod(state->beta, q);
+    GEN beta_prime = randomi(state->cl_params->bound);
+    bn_read_str(state->beta, GENtostr(beta_prime), strlen(GENtostr(beta_prime)), 10);
+    bn_mod(state->beta, state->beta, q);
+    
     ec_mul(g_to_the_alpha_times_beta, state->g_to_the_alpha, state->beta);
     ec_norm(g_to_the_alpha_times_beta, g_to_the_alpha_times_beta);
 
