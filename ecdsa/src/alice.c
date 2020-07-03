@@ -485,7 +485,6 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   ec_t g_to_the_e, pk_to_the_r_times_g_to_the_e;
 
   zk_proof_t pi_2;
-  zk_proof_t pi_c;
   zk_proof_t pi_gamma;
   cl_ciphertext_t ctx;
 
@@ -508,7 +507,6 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
   ec_null(com_x);
 
   zk_proof_null(pi_2);
-  zk_proof_null(pi_c);
   zk_proof_null(pi_gamma);
   cl_ciphertext_null(ctx);
 
@@ -532,7 +530,6 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_new(com_x);
 
     zk_proof_new(pi_2);
-    zk_proof_new(pi_c);
     zk_proof_new(pi_gamma);
     cl_ciphertext_new(ctx);
 
@@ -542,17 +539,15 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     bn_read_bin(pi_2->z, data + (2 * RLC_EC_SIZE_COMPRESSED), RLC_BN_SIZE);
     ec_read_bin(g_to_the_gamma, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
     ec_read_bin(R_c, data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
-    ec_read_bin(pi_c->a, data + (4 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
-    bn_read_bin(pi_c->z, data + (5 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE);
-    ec_read_bin(pi_gamma->a, data + (5 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED);
-    ec_read_bin(pi_gamma->b, data + (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED);
-    bn_read_bin(pi_gamma->z, data + (7 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_BN_SIZE);
+    ec_read_bin(pi_gamma->a, data + (4 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
+    ec_read_bin(pi_gamma->b, data + (5 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
+    bn_read_bin(pi_gamma->z, data + (6 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE);
 
     char ctx_str[RLC_CL_CIPHERTEXT_SIZE];
-    memcpy(ctx_str, data + (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_CL_CIPHERTEXT_SIZE);
     ctx->c1 = gp_read_str(ctx_str);
     memzero(ctx_str, RLC_CL_CIPHERTEXT_SIZE);
-    memcpy(ctx_str, data + (7 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
     ctx->c2 = gp_read_str(ctx_str);
 
     // Verify the commitment and ZK proofs.
@@ -562,9 +557,6 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     }
 
     if (zk_dlog_verify(pi_2, R_2) != RLC_OK) {
-      RLC_THROW(ERR_CAUGHT);
-    }
-    if (zk_dlog_verify(pi_c, R_c) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
     if (zk_dhtuple_verify(pi_gamma, R_2, g_to_the_gamma, R_c) != RLC_OK) {
@@ -677,7 +669,6 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     ec_free(R);
     ec_free(com_x);
     zk_proof_free(pi_2);
-    zk_proof_free(pi_c);
     zk_proof_free(pi_gamma);
     cl_ciphertext_free(ctx);
     if (payment_end_msg != NULL) message_free(payment_end_msg);

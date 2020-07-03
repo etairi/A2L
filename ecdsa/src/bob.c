@@ -297,7 +297,6 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   bn_t e_prime, s_2_prime;
 
   zk_proof_t pi_2_prime;
-  zk_proof_t pi_c_prime;
   zk_proof_t pi_a_prime;
   cl_ciphertext_t ctx_prime;
 
@@ -316,7 +315,6 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
   ec_null(R_2_prime);
 
   zk_proof_null(pi_2_prime);
-  zk_proof_null(pi_c_prime);
   zk_proof_null(pi_a_prime);
   cl_ciphertext_null(ctx_prime);
 
@@ -336,7 +334,6 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_new(R_2_prime);
 
     zk_proof_new(pi_2_prime);
-    zk_proof_new(pi_c_prime);
     zk_proof_new(pi_a_prime);
     cl_ciphertext_new(ctx_prime);
 
@@ -345,17 +342,15 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_read_bin(pi_2_prime->a, data + RLC_EC_SIZE_COMPRESSED, RLC_EC_SIZE_COMPRESSED);
     bn_read_bin(pi_2_prime->z, data + (2 * RLC_EC_SIZE_COMPRESSED), RLC_BN_SIZE);
     ec_read_bin(R_c_prime, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
-    ec_read_bin(pi_c_prime->a, data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
-    bn_read_bin(pi_c_prime->z, data + (4 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE);
-    ec_read_bin(pi_a_prime->a, data + (4 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED);
-    ec_read_bin(pi_a_prime->b, data + (5 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_EC_SIZE_COMPRESSED);
-    bn_read_bin(pi_a_prime->z, data + (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_BN_SIZE);
+    ec_read_bin(pi_a_prime->a, data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
+    ec_read_bin(pi_a_prime->b, data + (4 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
+    bn_read_bin(pi_a_prime->z, data + (5 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE);
 
     char ctx_str[RLC_CL_CIPHERTEXT_SIZE];
-    memcpy(ctx_str, data + (6 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (5 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_CL_CIPHERTEXT_SIZE);
     ctx_prime->c1 = gp_read_str(ctx_str);
     memzero(ctx_str, RLC_CL_CIPHERTEXT_SIZE);
-    memcpy(ctx_str, data + (6 * RLC_EC_SIZE_COMPRESSED) + (3 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (5 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
     ctx_prime->c2 = gp_read_str(ctx_str);
 
     // Verify the commitment and ZK proofs.
@@ -365,9 +360,6 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     }
 
     if (zk_dlog_verify(pi_2_prime, R_2_prime) != RLC_OK) {
-      RLC_THROW(ERR_CAUGHT);
-    }
-    if (zk_dlog_verify(pi_c_prime, R_c_prime) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
     if (zk_dhtuple_verify(pi_a_prime, R_2_prime, state->g_to_the_alpha, R_c_prime) != RLC_OK) {
@@ -468,7 +460,6 @@ int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data) {
     ec_free(R_c_prime);
     ec_free(R_2_prime);
     zk_proof_free(pi_2_prime);
-    zk_proof_free(pi_c_prime);
     zk_proof_free(pi_a_prime);
     cl_ciphertext_free(ctx_prime);
     if (serialized_message != NULL) free(serialized_message);
