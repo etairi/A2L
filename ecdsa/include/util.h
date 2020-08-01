@@ -1,5 +1,5 @@
-#ifndef TRILERO_ECDSA_INCLUDE_UTIL
-#define TRILERO_ECDSA_INCLUDE_UTIL
+#ifndef A2L_ECDSA_INCLUDE_UTIL
+#define A2L_ECDSA_INCLUDE_UTIL
 
 #include <stddef.h>
 #include "relic/relic.h"
@@ -100,4 +100,4 @@ int zk_dlog_verify(const zk_proof_t proof, const ec_t h);
 int zk_dhtuple_prove(zk_proof_t proof, const ec_t h, const ec_t u, const ec_t v, const bn_t w);
 int zk_dhtuple_verify(const zk_proof_t proof, const ec_t h, const ec_t u, const ec_t v);
 
-#endif // TRILERO_ECDSA_INCLUDE_UTIL
+#endif // A2L_ECDSA_INCLUDE_UTIL

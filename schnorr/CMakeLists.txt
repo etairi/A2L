@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(TRILERO_SCHNORR C)
+project(A2L_SCHNORR C)
 
 set(CMAKE_C_STANDARD 11)
 

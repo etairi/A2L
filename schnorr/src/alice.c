@@ -8,7 +8,7 @@
 #include "types.h"
 #include "util.h"
 
-unsigned SETUP_COMPLETED;
+unsigned REGISTRATION_COMPLETED;
 unsigned PUZZLE_SHARED;
 unsigned PUZZLE_SOLVED;
 
@@ -25,8 +25,8 @@ int get_message_type(char *key) {
 msg_handler_t get_message_handler(char *key) {
   switch (get_message_type(key))
   {
-    case SETUP_DONE:
-      return setup_done_handler;
+    case REGISTRATION_DONE:
+      return registration_done_handler;
     
     case PUZZLE_SHARE:
       return puzzle_share_handler;
@@ -96,7 +96,7 @@ int receive_message(alice_state_t state, void *socket) {
   return result_status;
 }
 
-int setup(alice_state_t state, void *socket) {
+int registration(alice_state_t state, void *socket) {
   if (state == NULL) {
     RLC_THROW(ERR_NO_VALID);
   }
@@ -104,8 +104,8 @@ int setup(alice_state_t state, void *socket) {
   int result_status = RLC_OK;
   uint8_t *serialized_message = NULL;
   
-  message_t setup_msg;
-  message_null(setup_msg);
+  message_t registration_msg;
+  message_null(registration_msg);
 
   bn_t q;
   bn_null(q);
@@ -129,31 +129,31 @@ int setup(alice_state_t state, void *socket) {
     }
 
     // Build and define the message.
-    char *msg_type = "setup";
+    char *msg_type = "registration";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
     const unsigned msg_data_length = (2 * RLC_G1_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE);
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
-    message_new(setup_msg, msg_type_length, msg_data_length);
+    message_new(registration_msg, msg_type_length, msg_data_length);
     
     // Serialize the message.
-    g1_write_bin(setup_msg->data, RLC_G1_SIZE_COMPRESSED, state->pcom->c, 1);
-    g1_write_bin(setup_msg->data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, com_zk_proof->c->c, 1);
-    bn_write_bin(setup_msg->data + (2 * RLC_G1_SIZE_COMPRESSED), RLC_BN_SIZE, com_zk_proof->u);
-    bn_write_bin(setup_msg->data + (2 * RLC_G1_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE, com_zk_proof->v);
+    g1_write_bin(registration_msg->data, RLC_G1_SIZE_COMPRESSED, state->pcom->c, 1);
+    g1_write_bin(registration_msg->data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, com_zk_proof->c->c, 1);
+    bn_write_bin(registration_msg->data + (2 * RLC_G1_SIZE_COMPRESSED), RLC_BN_SIZE, com_zk_proof->u);
+    bn_write_bin(registration_msg->data + (2 * RLC_G1_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE, com_zk_proof->v);
 
-    memcpy(setup_msg->type, msg_type, msg_type_length);
-    serialize_message(&serialized_message, setup_msg, msg_type_length, msg_data_length);
+    memcpy(registration_msg->type, msg_type, msg_type_length);
+    serialize_message(&serialized_message, registration_msg, msg_type_length, msg_data_length);
 
     // Send the message.
-    zmq_msg_t setup;
-    int rc = zmq_msg_init_size(&setup, total_msg_length);
+    zmq_msg_t registration;
+    int rc = zmq_msg_init_size(&registration, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       RLC_THROW(ERR_CAUGHT);
     }
 
-    memcpy(zmq_msg_data(&setup), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&setup, socket, ZMQ_DONTWAIT);
+    memcpy(zmq_msg_data(&registration), serialized_message, total_msg_length);
+    rc = zmq_msg_send(&registration, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       RLC_THROW(ERR_CAUGHT);
@@ -163,14 +163,14 @@ int setup(alice_state_t state, void *socket) {
   } RLC_FINALLY {
     bn_free(q);
     pedersen_com_zk_proof_free(com_zk_proof);
-    if (setup_msg != NULL) message_free(setup_msg);
+    if (registration_msg != NULL) message_free(registration_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
 
   return result_status;
 }
 
-int setup_done_handler(alice_state_t state, void *socket, uint8_t *data) {
+int registration_done_handler(alice_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
     RLC_THROW(ERR_NO_VALID);
   }
@@ -198,7 +198,7 @@ int setup_done_handler(alice_state_t state, void *socket, uint8_t *data) {
 
     g1_mul(state->sigma->sigma_1, state->sigma->sigma_1, t);
     g1_mul(state->sigma->sigma_2, state->sigma->sigma_2, t);
-    SETUP_COMPLETED = 1;
+    REGISTRATION_COMPLETED = 1;
   } RLC_CATCH_ANY {
     result_status = RLC_ERR;
   } RLC_FINALLY {
@@ -761,7 +761,7 @@ int main(void)
 {
   init();
   int result_status = RLC_OK;
-  SETUP_COMPLETED = 0;
+  REGISTRATION_COMPLETED = 0;
   PUZZLE_SHARED = 0;
   PUZZLE_SOLVED = 0;
 
@@ -804,15 +804,19 @@ int main(void)
       RLC_THROW(ERR_CAUGHT);
     }
 
-    if (setup(state, socket) != RLC_OK) {
+    start_time = ttimer();
+    if (registration(state, socket) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
 
-    while (!SETUP_COMPLETED) {
+    while (!REGISTRATION_COMPLETED) {
       if (receive_message(state, socket) != RLC_OK) {
         RLC_THROW(ERR_CAUGHT);
       }
     }
+    stop_time = ttimer();
+    total_time = stop_time - start_time;
+    printf("\nRegistration time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
     if (rc != 0) {
@@ -890,7 +894,6 @@ int main(void)
         RLC_THROW(ERR_CAUGHT);
       }
     }
-    
     stop_time = ttimer();
     total_time = stop_time - start_time;
     printf("\nPuzzle solver time: %.5f sec\n", total_time / CLOCK_PRECISION);

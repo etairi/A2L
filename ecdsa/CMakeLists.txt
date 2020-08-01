@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(TRILERO_ECDSA C)
+project(A2L_ECDSA C)
 
 set(CMAKE_C_STANDARD 11)
 

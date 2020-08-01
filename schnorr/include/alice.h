@@ -1,5 +1,5 @@
-#ifndef TRILERO_SCHNORR_INCLUDE_ALICE
-#define TRILERO_SCHNORR_INCLUDE_ALICE
+#ifndef A2L_SCHNORR_INCLUDE_ALICE
+#define A2L_SCHNORR_INCLUDE_ALICE
 
 #include <stddef.h>
 #include <string.h>
@@ -14,7 +14,7 @@
 static uint8_t tx[2] = { 116, 120 }; // "tx"
 
 typedef enum {
-  SETUP_DONE,
+  REGISTRATION_DONE,
   PROMISE_SENT,
   PUZZLE_SHARE,
   PUZZLE_SOLVE,
@@ -29,7 +29,7 @@ typedef struct {
 } symstruct_t;
 
 static symstruct_t msg_lookuptable[] = {
-  { "setup_done", SETUP_DONE },
+  { "registration_done", REGISTRATION_DONE },
   { "promise_sent", PROMISE_SENT },
   { "puzzle_share", PUZZLE_SHARE },
   { "payment_init_done", PAYMENT_INIT_DONE },
@@ -122,8 +122,8 @@ msg_handler_t get_message_handler(char *key);
 int handle_message(alice_state_t state, void *socket, zmq_msg_t message);
 int receive_message(alice_state_t state, void *socket);
 
-int setup(alice_state_t state, void *socket);
-int setup_done_handler(alice_state_t state, void *socket, uint8_t *data);
+int registration(alice_state_t state, void *socket);
+int registration_done_handler(alice_state_t state, void *socket, uint8_t *data);
 int token_share(alice_state_t state, void *socket);
 int puzzle_share_handler(alice_state_t state, void *socket, uint8_t *data);
 int payment_init(void *socket);
@@ -132,4 +132,4 @@ int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data);
 int puzzle_solve_handler(alice_state_t state, void *socket, uint8_t *data);
 int puzzle_solution_share(alice_state_t state, void *socket);
 
-#endif // TRILERO_SCHNORR_INCLUDE_ALICE
+#endif // A2L_SCHNORR_INCLUDE_ALICE

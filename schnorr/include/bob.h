@@ -1,5 +1,5 @@
-#ifndef TRILERO_SCHNORR_INCLUDE_BOB
-#define TRILERO_SCHNORR_INCLUDE_BOB
+#ifndef A2L_SCHNORR_INCLUDE_BOB
+#define A2L_SCHNORR_INCLUDE_BOB
 
 #include <stddef.h>
 #include <string.h>
@@ -117,4 +117,4 @@ int puzzle_share(bob_state_t state, void *socket);
 int puzzle_share_done_handler(bob_state_t state, void *socket, uint8_t *data);
 int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data);
 
-#endif // TRILERO_SCHNORR_INCLUDE_BOB
+#endif // A2L_SCHNORR_INCLUDE_BOB

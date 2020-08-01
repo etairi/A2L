@@ -1,5 +1,5 @@
-#ifndef TRILERO_ECDSA_INCLUDE_TUMBLER
-#define TRILERO_ECDSA_INCLUDE_TUMBLER
+#ifndef A2L_ECDSA_INCLUDE_TUMBLER
+#define A2L_ECDSA_INCLUDE_TUMBLER
 
 #include <stddef.h>
 #include <string.h>
@@ -12,7 +12,7 @@
 static uint8_t tx[2] = { 116, 120 }; // "tx"
 
 typedef enum {
-  SETUP,
+  REGISTRATION,
   PROMISE_INIT,
   PROMISE_SIGN,
   PROMISE_END,
@@ -27,7 +27,7 @@ typedef struct {
 } symstruct_t;
 
 static symstruct_t msg_lookuptable[] = {
-  { "setup", SETUP },
+  { "registration", REGISTRATION },
   { "promise_init", PROMISE_INIT },
   { "promise_sign", PROMISE_SIGN },
   { "promise_end", PROMISE_END },
@@ -138,7 +138,7 @@ msg_handler_t get_message_handler(char *key);
 int handle_message(tumbler_state_t state, void *socket, zmq_msg_t message);
 int receive_message(tumbler_state_t state, void *socket);
 
-int setup_handler(tumbler_state_t state, void *socket, uint8_t *data);
+int registration_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_init_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_sign_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int promise_end_handler(tumbler_state_t state, void *socket, uint8_t *data);
@@ -146,4 +146,4 @@ int payment_init_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int payment_sign_handler(tumbler_state_t state, void *socket, uint8_t *data);
 int payment_end_handler(tumbler_state_t state, void *socket, uint8_t *data);
 
-#endif // TRILERO_ECDSA_INCLUDE_TUMBLER
+#endif // A2L_ECDSA_INCLUDE_TUMBLER

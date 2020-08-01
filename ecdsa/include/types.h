@@ -1,5 +1,5 @@
-#ifndef TRILERO_ECDSA_INCLUDE_TYPES
-#define TRILERO_ECDSA_INCLUDE_TYPES
+#ifndef A2L_ECDSA_INCLUDE_TYPES
+#define A2L_ECDSA_INCLUDE_TYPES
 
 #include "relic/relic.h"
 #include "pari/pari.h"
@@ -461,4 +461,4 @@ typedef keys_st *keys_t;
     keys = NULL;                                    \
   } while (0)
 
-#endif // TRILERO_ECDSA_INCLUDE_TYPES
+#endif // A2L_ECDSA_INCLUDE_TYPES

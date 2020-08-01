@@ -22,8 +22,8 @@ int get_message_type(char *key) {
 msg_handler_t get_message_handler(char *key) {
   switch (get_message_type(key))
   {
-    case SETUP:
-      return setup_handler;
+    case REGISTRATION:
+      return registration_handler;
     
     case PROMISE_INIT:
       return promise_init_handler;
@@ -99,14 +99,14 @@ int receive_message(tumbler_state_t state, void *socket) {
   return result_status;
 }
 
-int setup_handler(tumbler_state_t state, void *socket, uint8_t *data) {
+int registration_handler(tumbler_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
     RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
 
-  message_t setup_done_msg;
+  message_t registration_done_msg;
   uint8_t *serialized_message = NULL;
 
   pedersen_com_t com;
@@ -138,29 +138,29 @@ int setup_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     }
 
     // Build and define the message.
-    char *msg_type = "setup_done";
+    char *msg_type = "registration_done";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
     const unsigned msg_data_length = 2 * RLC_G1_SIZE_COMPRESSED;
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
-    message_new(setup_done_msg, msg_type_length, msg_data_length);
+    message_new(registration_done_msg, msg_type_length, msg_data_length);
 
     // Serialize the data for the message.
-    g1_write_bin(setup_done_msg->data, RLC_G1_SIZE_COMPRESSED, sigma_prime->sigma_1, 1);
-    g1_write_bin(setup_done_msg->data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, sigma_prime->sigma_2, 1);
+    g1_write_bin(registration_done_msg->data, RLC_G1_SIZE_COMPRESSED, sigma_prime->sigma_1, 1);
+    g1_write_bin(registration_done_msg->data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, sigma_prime->sigma_2, 1);
 
-    memcpy(setup_done_msg->type, msg_type, msg_type_length);
-    serialize_message(&serialized_message, setup_done_msg, msg_type_length, msg_data_length);
+    memcpy(registration_done_msg->type, msg_type, msg_type_length);
+    serialize_message(&serialized_message, registration_done_msg, msg_type_length, msg_data_length);
 
     // Send the message.
-    zmq_msg_t setup_done;
-    int rc = zmq_msg_init_size(&setup_done, total_msg_length);
+    zmq_msg_t registration_done;
+    int rc = zmq_msg_init_size(&registration_done, total_msg_length);
     if (rc < 0) {
       fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
       RLC_THROW(ERR_CAUGHT);
     }
 
-    memcpy(zmq_msg_data(&setup_done), serialized_message, total_msg_length);
-    rc = zmq_msg_send(&setup_done, socket, ZMQ_DONTWAIT);
+    memcpy(zmq_msg_data(&registration_done), serialized_message, total_msg_length);
+    rc = zmq_msg_send(&registration_done, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       RLC_THROW(ERR_CAUGHT);
@@ -171,7 +171,7 @@ int setup_handler(tumbler_state_t state, void *socket, uint8_t *data) {
     pedersen_com_free(com);
     pedersen_com_zk_proof_free(com_zk_proof);
     ps_signature_free(sigma_prime);
-    if (setup_done_msg != NULL) message_free(setup_done_msg);
+    if (registration_done_msg != NULL) message_free(registration_done_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
 
