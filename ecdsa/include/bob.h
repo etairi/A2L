@@ -11,13 +11,9 @@
 #define ALICE_ENDPOINT    "tcp://localhost:8182"
 #define BOB_ENDPOINT      "tcp://*:8183"
 
-static uint8_t tx[2] = { 116, 120 }; // "tx"
-
 typedef enum {
   TOKEN_SHARE,
-  PROMISE_INIT_DONE,
-  PROMISE_SIGN_DONE,
-  PROMISE_END_DONE,
+  PROMISE_DONE,
   PUZZLE_SHARE_DONE,
   PUZZLE_SOLUTION_SHARE
 } msgcode_t;
@@ -29,9 +25,7 @@ typedef struct {
 
 static symstruct_t msg_lookuptable[] = {
   { "token_share", TOKEN_SHARE },
-  { "promise_init_done", PROMISE_INIT_DONE },
-  { "promise_sign_done", PROMISE_SIGN_DONE },
-  { "promise_end_done", PROMISE_END_DONE },
+  { "promise_done", PROMISE_DONE },
   { "puzzle_share_done", PUZZLE_SHARE_DONE },
   { "puzzle_solution_share", PUZZLE_SOLUTION_SHARE }
 };
@@ -39,20 +33,20 @@ static symstruct_t msg_lookuptable[] = {
 #define TOTAL_MESSAGES (sizeof(msg_lookuptable) / sizeof(symstruct_t))
 
 typedef struct {
-  keys_t keys;
-  cl_params_t cl_params;
-  cl_public_key_t tumbler_cl_pk;
+  ec_secret_key_t bob_ec_sk;
+  ec_public_key_t bob_ec_pk;
+  ec_public_key_t tumbler_ec_pk;
   ps_public_key_t tumbler_ps_pk;
+  cl_public_key_t tumbler_cl_pk;
+  cl_params_t cl_params;
   commit_t com;
   ec_t g_to_the_alpha;
   cl_ciphertext_t ctx_alpha;
-  bn_t k_1_prime;
-  ec_t R_1_prime;
-  bn_t s_prime;
-  bn_t r_prime;
+  ecdsa_signature_t sigma_r;
+  ecdsa_signature_t sigma_t;
   bn_t beta;
   bn_t tid;
-  ps_signature_t sigma;
+  ps_signature_t sigma_tid;
 } bob_state_st;
 
 typedef bob_state_st *bob_state_t;
@@ -65,38 +59,38 @@ typedef bob_state_st *bob_state_t;
     if (state == NULL) {                                    \
       RLC_THROW(ERR_NO_MEMORY);                             \
     }                                                       \
-    keys_new((state)->keys);                                \
-    cl_params_new((state)->cl_params);                      \
-    cl_public_key_new((state)->tumbler_cl_pk);              \
+    ec_secret_key_new((state)->bob_ec_sk);                  \
+    ec_public_key_new((state)->bob_ec_pk);                  \
+    ec_public_key_new((state)->tumbler_ec_pk);              \
     ps_public_key_new((state)->tumbler_ps_pk);              \
+    cl_public_key_new((state)->tumbler_cl_pk);              \
+    cl_params_new((state)->cl_params);                      \
     commit_new((state)->com);                               \
     ec_new((state)->g_to_the_alpha);                        \
     cl_ciphertext_new((state)->ctx_alpha);                  \
-    bn_new((state)->k_1_prime);                             \
-    ec_new((state)->R_1_prime);                             \
-    bn_new((state)->s_prime);                               \
-    bn_new((state)->r_prime);                               \
+    ecdsa_signature_new((state)->sigma_r);                  \
+    ecdsa_signature_new((state)->sigma_t);                  \
     bn_new((state)->beta);                                  \
     bn_new((state)->tid);                                   \
-    ps_signature_new((state)->sigma);                       \
+    ps_signature_new((state)->sigma_tid);                   \
   } while (0)
 
 #define bob_state_free(state)                               \
   do {                                                      \
-    keys_free((state)->keys);                               \
-    cl_params_free((state)->cl_params);                     \
-    cl_public_key_free((state)->tumbler_cl_pk);             \
+    ec_secret_key_free((state)->bob_ec_sk);                 \
+    ec_public_key_free((state)->bob_ec_pk);                 \
+    ec_public_key_free((state)->tumbler_ec_pk);             \
     ps_public_key_free((state)->tumbler_ps_pk);             \
+    cl_public_key_free((state)->tumbler_cl_pk);             \
+    cl_params_free((state)->cl_params);                     \
     commit_free((state)->com);                              \
     ec_free((state)->g_to_the_alpha);                       \
     cl_ciphertext_free((state)->ctx_alpha);                 \
-    bn_free((state)->k_1_prime);                            \
-    ec_free((state)->R_1_prime);                            \
-    bn_free((state)->s_prime);                              \
-    bn_free((state)->r_prime);                              \
+    ecdsa_signature_free((state)->sigma_r);                 \
+    ecdsa_signature_free((state)->sigma_t);                 \
     bn_free((state)->beta);                                 \
     bn_free((state)->tid);                                  \
-    ps_signature_free((state)->sigma);                      \
+    ps_signature_free((state)->sigma_tid);                  \
     free(state);                                            \
     state = NULL;                                           \
   } while (0)
@@ -110,9 +104,7 @@ int receive_message(bob_state_t state, void *socket);
 
 int token_share_handler(bob_state_t state, void *socet, uint8_t *data);
 int promise_init(bob_state_t state, void *socket);
-int promise_init_done_handler(bob_state_t state, void *socket, uint8_t *data);
-int promise_sign_done_handler(bob_state_t state, void *socket, uint8_t *data);
-int promise_end_done_handler(bob_state_t state, void *socket, uint8_t *data);
+int promise_done_handler(bob_state_t state, void *socket, uint8_t *data);
 int puzzle_share(bob_state_t state, void *socket);
 int puzzle_share_done_handler(bob_state_t state, void *socket, uint8_t *data);
 int puzzle_solution_share_handler(bob_state_t state, void *socet, uint8_t *data);

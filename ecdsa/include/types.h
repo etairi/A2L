@@ -348,6 +348,39 @@ typedef ec_public_key_st *ec_public_key_t;
   } while (0)
 
 typedef struct {
+  bn_t r;
+  bn_t s;
+  ec_t R;
+  zk_proof_t pi;
+} ecdsa_signature_st;
+
+typedef ecdsa_signature_st *ecdsa_signature_t;
+
+#define ecdsa_signature_null(signature) signature = NULL;
+
+#define ecdsa_signature_new(signature)                \
+  do {                                                \
+    signature = malloc(sizeof(ecdsa_signature_st));   \
+    if (signature == NULL) {                          \
+      RLC_THROW(ERR_NO_MEMORY);                       \
+    }                                                 \
+    bn_new((signature)->r);                           \
+    bn_new((signature)->s);                           \
+    ec_new((signature)->R);                           \
+    zk_proof_new((signature)->pi);                    \
+  } while (0)
+
+#define ecdsa_signature_free(signature)               \
+  do {                                                \
+    bn_free((signature)->r);                          \
+    bn_free((signature)->s);                          \
+    ec_free((signature)->R);                          \
+    zk_proof_free((signature)->pi);                   \
+    free(signature);                                  \
+    signature = NULL;                                 \
+  } while (0)
+
+typedef struct {
   g1_t sigma_1;
   g1_t sigma_2;
 } ps_signature_st;
@@ -426,39 +459,6 @@ typedef ps_secret_key_st *ps_secret_key_t;
     g1_free((secret_key)->X_1);                         \
     free(secret_key);                                   \
     secret_key = NULL;                                  \
-  } while (0)
-
-typedef struct {
-  cl_public_key_t cl_pk;
-  cl_secret_key_t cl_sk;
-  ec_public_key_t ec_pk;
-  ec_secret_key_t ec_sk;
-} keys_st;
-
-typedef keys_st *keys_t;
-
-#define keys_null(keys) keys = NULL;
-
-#define keys_new(keys)                              \
-  do {                                              \
-    keys = malloc(sizeof(keys_st));                 \
-    if (keys == NULL) {                             \
-      RLC_THROW(ERR_NO_MEMORY);                     \
-    }                                               \
-    cl_public_key_new((keys)->cl_pk);               \
-    cl_secret_key_new((keys)->cl_sk);               \
-    ec_public_key_new((keys)->ec_pk);               \
-    ec_secret_key_new((keys)->ec_sk);               \
-  } while (0)
-
-#define keys_free(keys)                             \
-  do {                                              \
-    cl_public_key_free((keys)->cl_pk);              \
-    cl_secret_key_free((keys)->cl_sk);              \
-    ec_public_key_free((keys)->ec_pk);              \
-    ec_secret_key_free((keys)->ec_sk);              \
-    free(keys);                                     \
-    keys = NULL;                                    \
   } while (0)
 
 #endif // A2L_ECDSA_INCLUDE_TYPES

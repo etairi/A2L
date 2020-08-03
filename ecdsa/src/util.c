@@ -97,16 +97,10 @@ void deserialize_message(message_t *deserialized_message, const uint8_t *seriali
 int generate_keys_and_write_to_file(const cl_params_t params) {
 	int result_status = RLC_OK;
 
-	GEN cl_sk_alice, cl_pk_alice;
-	GEN cl_sk_bob, cl_pk_bob;
 	GEN cl_sk_tumbler, cl_pk_tumbler;
-
-	cl_public_key_t pk_alice, pk_bob;
-	cl_ciphertext_t ctx_ec_sk_alice, ctx_ec_sk_bob;
 
 	bn_t q, x, y, ec_sk_alice, ec_sk_bob, ec_sk_tumbler;
 	ec_t ec_pk_alice, ec_pk_bob, ec_pk_tumbler;
-	ec_t ec_pk_alice_tumbler, ec_pk_bob_tumbler;
 
 	ps_secret_key_t ps_sk_tumbler;
 	ps_public_key_t ps_pk_tumbler;
@@ -115,11 +109,6 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 	uint8_t serialized_ec_pk[RLC_EC_SIZE_COMPRESSED];
 	uint8_t serialized_g1[RLC_G1_SIZE_COMPRESSED];
 	uint8_t serialized_g2[RLC_G2_SIZE_COMPRESSED];
-
-	cl_public_key_null(pk_alice);
-	cl_public_key_null(pk_bob);
-	cl_ciphertext_null(ctx_ec_sk_alice);
-	cl_ciphertext_null(ctx_ec_sk_bob);
 
 	bn_null(q);
 	bn_null(x);
@@ -131,18 +120,11 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 	ec_null(ec_pk_alice);
 	ec_null(ec_pk_bob);
 	ec_null(ec_pk_tumbler);
-	ec_null(ec_pk_alice_tumbler);
-	ec_null(ec_pk_bob_tumbler);
 
 	ps_secret_key_null(ps_sk_tumbler);
 	ps_public_key_null(ps_pk_tumbler);
 
 	RLC_TRY {
-		cl_public_key_new(pk_alice);
-		cl_public_key_new(pk_bob);
-		cl_ciphertext_new(ctx_ec_sk_alice);
-		cl_ciphertext_new(ctx_ec_sk_bob);
-
 		bn_new(q);
 		bn_new(x);
 		bn_new(y);
@@ -153,13 +135,11 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		ec_new(ec_pk_alice);
 		ec_new(ec_pk_bob);
 		ec_new(ec_pk_tumbler);
-		ec_new(ec_pk_alice_tumbler);
-		ec_new(ec_pk_bob_tumbler);
 
 		ps_secret_key_new(ps_sk_tumbler);
 		ps_public_key_new(ps_pk_tumbler);
 
-		// Compute EC public and secret keys.
+		// Compute EC secret/public key pairs.
 		ec_curve_get_ord(q);
 		bn_rand_mod(ec_sk_alice, q);
 		bn_rand_mod(ec_sk_bob, q);
@@ -169,42 +149,11 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		ec_mul_gen(ec_pk_bob, ec_sk_bob);
 		ec_mul_gen(ec_pk_tumbler, ec_sk_tumbler);
 
-		ec_mul(ec_pk_alice_tumbler, ec_pk_alice, ec_sk_tumbler);
-		ec_norm(ec_pk_alice_tumbler, ec_pk_alice_tumbler);
-		ec_mul(ec_pk_bob_tumbler, ec_pk_bob, ec_sk_tumbler);
-		ec_norm(ec_pk_bob_tumbler, ec_pk_bob_tumbler);
-
-		// Compute CL encryption public and secret keys.
-		cl_sk_alice = randomi(params->bound);
-		cl_pk_alice = nupow(params->g_q, cl_sk_alice, NULL);
-		pk_alice->pk = cl_pk_alice;
-
-		cl_sk_bob = randomi(params->bound);
-		cl_pk_bob = nupow(params->g_q, cl_sk_bob, NULL);
-		pk_bob->pk = cl_pk_bob;
-
+		// Compute CL encryption secret/public key pair for the tumbler.
 		cl_sk_tumbler = randomi(params->bound);
 		cl_pk_tumbler = nupow(params->g_q, cl_sk_tumbler, NULL);
 
-		// Encrypt EC secret key of Alice and Bob.
-		const unsigned plain_str_len = bn_size_str(ec_sk_alice, 10);
-    char plain_str[plain_str_len];
-    bn_write_str(plain_str, plain_str_len, ec_sk_alice, 10);
-
-		GEN plain_ec_sk_alice = strtoi(plain_str);
-		if (cl_enc(ctx_ec_sk_alice, plain_ec_sk_alice, pk_alice, params) != RLC_OK) {
-			RLC_THROW(ERR_CAUGHT);
-		}
-
-		memzero(plain_str, plain_str_len);
-		bn_write_str(plain_str, plain_str_len, ec_sk_bob, 10);
-
-		GEN plain_ec_sk_bob = strtoi(plain_str);
-		if (cl_enc(ctx_ec_sk_bob, plain_ec_sk_bob, pk_bob, params) != RLC_OK) {
-			RLC_THROW(ERR_CAUGHT);
-		}
-
-		// Compute PS public and secret keys.
+		// Compute PS secret/public key pair for the tumbler.
 		pc_get_ord(q);
 		bn_rand_mod(x, q);
 		bn_rand_mod(y, q);
@@ -240,11 +189,8 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 
 		bn_write_bin(serialized_ec_sk, RLC_BN_SIZE, ec_sk_alice);
 		fwrite(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file);
-		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_alice_tumbler, 1);
+		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_alice, 1);
 		fwrite(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file);
-
-		fwrite(GENtostr(cl_sk_alice), sizeof(char), RLC_CL_SECRET_KEY_SIZE, file);
-    fwrite(GENtostr(cl_pk_alice), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
 
 		memzero(serialized_ec_sk, RLC_BN_SIZE);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
@@ -259,11 +205,8 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 
 		bn_write_bin(serialized_ec_sk, RLC_BN_SIZE, ec_sk_bob);
 		fwrite(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file);
-		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_bob_tumbler, 1);
+		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_bob, 1);
 		fwrite(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file);
-
-		fwrite(GENtostr(cl_sk_bob), sizeof(char), RLC_CL_SECRET_KEY_SIZE, file);
-    fwrite(GENtostr(cl_pk_bob), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
 
 		memzero(serialized_ec_sk, RLC_BN_SIZE);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
@@ -279,20 +222,11 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		// Tumbler has two EC public keys, one with Alice and one with Bob.
 		bn_write_bin(serialized_ec_sk, RLC_BN_SIZE, ec_sk_tumbler);
 		fwrite(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file);
-		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_alice_tumbler, 1);
-		fwrite(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file);
-		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
-		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_bob_tumbler, 1);
+		ec_write_bin(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED, ec_pk_tumbler, 1);
 		fwrite(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file);
 
 		fwrite(GENtostr(cl_sk_tumbler), sizeof(char), RLC_CL_SECRET_KEY_SIZE, file);
     fwrite(GENtostr(cl_pk_tumbler), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
-		fwrite(GENtostr(cl_pk_alice), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
-		fwrite(GENtostr(cl_pk_bob), sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file);
-		fwrite(GENtostr(ctx_ec_sk_alice->c1), sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file);
-		fwrite(GENtostr(ctx_ec_sk_alice->c2), sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file);
-		fwrite(GENtostr(ctx_ec_sk_bob->c1), sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file);
-		fwrite(GENtostr(ctx_ec_sk_bob->c2), sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file);
 
 		g1_write_bin(serialized_g1, RLC_G1_SIZE_COMPRESSED, ps_sk_tumbler->X_1, 1);
 		fwrite(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file);
@@ -305,6 +239,9 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		g2_write_bin(serialized_g2, RLC_G2_SIZE_COMPRESSED, ps_pk_tumbler->Y_2, 1);
 		fwrite(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file);
 
+		printf("ec_pk_alice: ");
+		ec_print(ec_pk_alice);
+
 		fclose(file);
 
 		free(alice_key_file_name);
@@ -313,11 +250,6 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 	} RLC_CATCH_ANY {
 		result_status = RLC_ERR;
 	} RLC_FINALLY {
-		cl_public_key_free(pk_alice);
-		cl_public_key_free(pk_bob);
-		cl_ciphertext_free(ctx_ec_sk_alice);
-		cl_ciphertext_free(ctx_ec_sk_bob);
-
 		bn_free(q);
 		bn_free(x);
 		bn_free(y);
@@ -328,8 +260,6 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		ec_free(ec_pk_alice);
 		ec_free(ec_pk_bob);
 		ec_free(ec_pk_tumbler);
-		ec_free(ec_pk_alice_tumbler);
-		ec_free(ec_pk_bob_tumbler);
 
 		ps_secret_key_free(ps_sk_tumbler);
 		ps_public_key_free(ps_pk_tumbler);
@@ -339,17 +269,18 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 }
 
 int read_keys_from_file_alice_bob(const char *name,
-																	keys_t keys,
-																	cl_public_key_t tumbler_cl_public_key,
-																	ps_public_key_t tumbler_ps_public_key) {
+																	ec_secret_key_t ec_sk,
+																	ec_public_key_t ec_pk,
+																	ec_public_key_t tumbler_ec_pk,
+																	ps_public_key_t tumbler_ps_pk,
+																	cl_public_key_t tumbler_cl_pk) {
 	int result_status = RLC_OK;
 
 	uint8_t serialized_ec_sk[RLC_BN_SIZE];
 	uint8_t serialized_ec_pk[RLC_EC_SIZE_COMPRESSED];
-	char serialized_cl_sk[RLC_CL_SECRET_KEY_SIZE];
-	char serialized_cl_pk[RLC_CL_PUBLIC_KEY_SIZE];
 	uint8_t serialized_g1[RLC_G1_SIZE_COMPRESSED];
 	uint8_t serialized_g2[RLC_G2_SIZE_COMPRESSED];
+	char serialized_cl_pk[RLC_CL_PUBLIC_KEY_SIZE];
 
 	RLC_TRY {
 		unsigned key_file_length = strlen(name) + strlen(KEY_FILE_EXTENSION) + 10;
@@ -369,24 +300,13 @@ int read_keys_from_file_alice_bob(const char *name,
 		if (fread(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		bn_read_bin(keys->ec_sk->sk, serialized_ec_sk, RLC_BN_SIZE);
+		bn_read_bin(ec_sk->sk, serialized_ec_sk, RLC_BN_SIZE);
 
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		ec_read_bin(keys->ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
-
-
-		if (fread(serialized_cl_sk, sizeof(char), RLC_CL_SECRET_KEY_SIZE, file) != RLC_CL_SECRET_KEY_SIZE) {
-			RLC_THROW(ERR_NO_READ);
-		}
-		keys->cl_sk->sk = gp_read_str(serialized_cl_sk);
-		
-		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
-			RLC_THROW(ERR_NO_READ);
-		}
-		keys->cl_pk->pk = gp_read_str(serialized_cl_pk);
-		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
+		ec_read_bin(ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+		memzero(serialized_ec_sk, RLC_EC_SIZE_COMPRESSED);
 
 		fclose(file);
 		free(key_file_name);
@@ -405,28 +325,34 @@ int read_keys_from_file_alice_bob(const char *name,
 			RLC_THROW(ERR_NO_FILE);
 		}
 
-		fseek(file, RLC_BN_SIZE + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_CL_SECRET_KEY_SIZE, SEEK_SET);
+		fseek(file, RLC_BN_SIZE, SEEK_SET);
+		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		ec_read_bin(tumbler_ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+
+		fseek(file, RLC_CL_SECRET_KEY_SIZE, SEEK_CUR);
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		tumbler_cl_public_key->pk = gp_read_str(serialized_cl_pk);
+		tumbler_cl_pk->pk = gp_read_str(serialized_cl_pk);
 
-		fseek(file, (2 * RLC_CL_PUBLIC_KEY_SIZE) + (4 * RLC_CL_CIPHERTEXT_SIZE) + RLC_G1_SIZE_COMPRESSED, SEEK_CUR);
+		fseek(file, RLC_G1_SIZE_COMPRESSED, SEEK_CUR);
 		if (fread(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file) != RLC_G1_SIZE_COMPRESSED) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		g1_read_bin(tumbler_ps_public_key->Y_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
+		g1_read_bin(tumbler_ps_pk->Y_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
 
 		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		g2_read_bin(tumbler_ps_public_key->X_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
+		g2_read_bin(tumbler_ps_pk->X_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
 		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
 
 		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		g2_read_bin(tumbler_ps_public_key->Y_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
+		g2_read_bin(tumbler_ps_pk->Y_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
 
 		fclose(file);
 		free(key_file_name);
@@ -437,21 +363,20 @@ int read_keys_from_file_alice_bob(const char *name,
 	return result_status;
 }
 
-int read_keys_from_file_tumbler(keys_t keys_alice,
-																keys_t keys_bob,
-																cl_public_key_t cl_public_key_alice,
-																cl_public_key_t cl_public_key_bob,
-																cl_ciphertext_t cl_ctx_ec_sk_alice,
-																cl_ciphertext_t cl_ctx_ec_sk_bob,
-																ps_secret_key_t ps_sk,
-																ps_public_key_t ps_pk) {
+int read_keys_from_file_tumbler(ec_secret_key_t tumbler_ec_sk,
+																ec_public_key_t tumbler_ec_pk,
+																ps_secret_key_t tumbler_ps_sk,
+																ps_public_key_t tumbler_ps_pk,
+																cl_secret_key_t tumbler_cl_sk,
+																cl_public_key_t tumbler_cl_pk,
+																ec_public_key_t alice_ec_pk,
+																ec_public_key_t bob_ec_pk) {
 	int result_status = RLC_OK;
 
 	uint8_t serialized_ec_sk[RLC_BN_SIZE];
 	uint8_t serialized_ec_pk[RLC_EC_SIZE_COMPRESSED];
 	char serialized_cl_sk[RLC_CL_SECRET_KEY_SIZE];
 	char serialized_cl_pk[RLC_CL_PUBLIC_KEY_SIZE];
-	char serialized_cl_ct[RLC_CL_CIPHERTEXT_SIZE];
 	uint8_t serialized_g1[RLC_G1_SIZE_COMPRESSED];
 	uint8_t serialized_g2[RLC_G2_SIZE_COMPRESSED];
 
@@ -473,89 +398,92 @@ int read_keys_from_file_tumbler(keys_t keys_alice,
 		if (fread(serialized_ec_sk, sizeof(uint8_t), RLC_BN_SIZE, file) != RLC_BN_SIZE) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		bn_read_bin(keys_alice->ec_sk->sk, serialized_ec_sk, RLC_BN_SIZE);
-		bn_read_bin(keys_bob->ec_sk->sk, serialized_ec_sk, RLC_BN_SIZE);
+		bn_read_bin(tumbler_ec_sk->sk, serialized_ec_sk, RLC_BN_SIZE);
 
 		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		ec_read_bin(keys_alice->ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+		ec_read_bin(tumbler_ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
 		
-		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
-			RLC_THROW(ERR_NO_READ);
-		}
-		ec_read_bin(keys_bob->ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
-
 		if (fread(serialized_cl_sk, sizeof(char), RLC_CL_SECRET_KEY_SIZE, file) != RLC_CL_SECRET_KEY_SIZE) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		keys_alice->cl_sk->sk = gp_read_str(serialized_cl_sk);
-		keys_bob->cl_sk->sk = gp_read_str(serialized_cl_sk);
+		tumbler_cl_sk->sk = gp_read_str(serialized_cl_sk);
 		
 		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		keys_alice->cl_pk->pk = gp_read_str(serialized_cl_pk);
-		keys_bob->cl_pk->pk = gp_read_str(serialized_cl_pk);
-		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
-
-		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
-			RLC_THROW(ERR_NO_READ);
-		}
-		cl_public_key_alice->pk = gp_read_str(serialized_cl_pk);
-		memzero(serialized_cl_pk, RLC_CL_PUBLIC_KEY_SIZE);
-
-		if (fread(serialized_cl_pk, sizeof(char), RLC_CL_PUBLIC_KEY_SIZE, file) != RLC_CL_PUBLIC_KEY_SIZE) {
-			RLC_THROW(ERR_NO_READ);
-		}
-		cl_public_key_bob->pk = gp_read_str(serialized_cl_pk);
-
-		if (fread(serialized_cl_ct, sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file) != RLC_CL_CIPHERTEXT_SIZE) {
-			RLC_THROW(ERR_CAUGHT);
-		}
-		cl_ctx_ec_sk_alice->c1 = gp_read_str(serialized_cl_ct);
-		memzero(serialized_cl_ct, RLC_CL_CIPHERTEXT_SIZE);
-
-		if (fread(serialized_cl_ct, sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file) != RLC_CL_CIPHERTEXT_SIZE) {
-			RLC_THROW(ERR_CAUGHT);
-		}
-		cl_ctx_ec_sk_alice->c2 = gp_read_str(serialized_cl_ct);
-		memzero(serialized_cl_ct, RLC_CL_CIPHERTEXT_SIZE);
-		
-		if (fread(serialized_cl_ct, sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file) != RLC_CL_CIPHERTEXT_SIZE) {
-			RLC_THROW(ERR_CAUGHT);
-		}
-		cl_ctx_ec_sk_bob->c1 = gp_read_str(serialized_cl_ct);
-		memzero(serialized_cl_ct, RLC_CL_CIPHERTEXT_SIZE);
-
-		if (fread(serialized_cl_ct, sizeof(char), RLC_CL_CIPHERTEXT_SIZE, file) != RLC_CL_CIPHERTEXT_SIZE) {
-			RLC_THROW(ERR_CAUGHT);
-		}
-		cl_ctx_ec_sk_bob->c2 = gp_read_str(serialized_cl_ct);
+		tumbler_cl_pk->pk = gp_read_str(serialized_cl_pk);
 
 		if (fread(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file) != RLC_G1_SIZE_COMPRESSED) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		g1_read_bin(ps_sk->X_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
+		g1_read_bin(tumbler_ps_sk->X_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
 		memzero(serialized_g1, RLC_G1_SIZE_COMPRESSED);
 
 		if (fread(serialized_g1, sizeof(uint8_t), RLC_G1_SIZE_COMPRESSED, file) != RLC_G1_SIZE_COMPRESSED) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		g1_read_bin(ps_pk->Y_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
+		g1_read_bin(tumbler_ps_pk->Y_1, serialized_g1, RLC_G1_SIZE_COMPRESSED);
 
 		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		g2_read_bin(ps_pk->X_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
+		g2_read_bin(tumbler_ps_pk->X_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
 		memzero(serialized_g2, RLC_G2_SIZE_COMPRESSED);
 
 		if (fread(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file) != RLC_G2_SIZE_COMPRESSED) {
 			RLC_THROW(ERR_NO_READ);
 		}
-		g2_read_bin(ps_pk->Y_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
+		g2_read_bin(tumbler_ps_pk->Y_2, serialized_g2, RLC_G2_SIZE_COMPRESSED);
+
+		fclose(file);
+		free(key_file_name);
+
+		key_file_length = strlen(ALICE_KEY_FILE_PREFIX) + strlen(KEY_FILE_EXTENSION) + 10;
+		key_file_name = malloc(key_file_length);
+		if (key_file_name == NULL) {
+			RLC_THROW(ERR_CAUGHT);
+		}
+
+		snprintf(key_file_name, key_file_length, "../keys/%s.%s", ALICE_KEY_FILE_PREFIX, KEY_FILE_EXTENSION);
 		
+		file = fopen(key_file_name, "rb");
+		if (file == NULL) {
+			RLC_THROW(ERR_NO_FILE);
+		}
+
+		fseek(file, RLC_BN_SIZE, SEEK_SET);
+		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		ec_read_bin(alice_ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+
+		fclose(file);
+		free(key_file_name);
+
+		key_file_length = strlen(BOB_KEY_FILE_PREFIX) + strlen(KEY_FILE_EXTENSION) + 10;
+		key_file_name = malloc(key_file_length);
+		if (key_file_name == NULL) {
+			RLC_THROW(ERR_CAUGHT);
+		}
+
+		snprintf(key_file_name, key_file_length, "../keys/%s.%s", BOB_KEY_FILE_PREFIX, KEY_FILE_EXTENSION);
+		
+		file = fopen(key_file_name, "rb");
+		if (file == NULL) {
+			RLC_THROW(ERR_NO_FILE);
+		}
+
+		fseek(file, RLC_BN_SIZE, SEEK_SET);
+		if (fread(serialized_ec_pk, sizeof(uint8_t), RLC_EC_SIZE_COMPRESSED, file) != RLC_EC_SIZE_COMPRESSED) {
+			RLC_THROW(ERR_NO_READ);
+		}
+		ec_read_bin(bob_ec_pk->pk, serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+		memzero(serialized_ec_pk, RLC_EC_SIZE_COMPRESSED);
+
 		fclose(file);
 		free(key_file_name);
 	} RLC_CATCH_ANY {
@@ -643,6 +571,165 @@ int cl_dec(GEN *plaintext,
   }
 
   return result_status;
+}
+
+int adaptor_ecdsa_sign(ecdsa_signature_t signature,
+											 uint8_t *msg,
+											 size_t len,
+											 const ec_t Y,
+											 const ec_secret_key_t secret_key) {
+	int result_status = RLC_OK;
+
+	bn_t q, k, k_inverse, x, e;
+	ec_t R_tilde;
+	uint8_t h[RLC_MD_LEN];
+
+	bn_null(q);
+	bn_null(k);
+	bn_null(k_inverse);
+	bn_null(x);
+	bn_null(e);
+	ec_null(R_tilde);
+
+	RLC_TRY {
+		bn_new(q);
+		bn_new(k);
+		bn_new(k_inverse);
+		bn_new(x);
+		bn_new(e);
+		ec_new(R_tilde);
+
+		ec_curve_get_ord(q);
+		do {
+			do {
+				bn_rand_mod(k, q);
+				ec_mul_gen(R_tilde, k);
+				ec_mul(signature->R, Y, k);
+				ec_get_x(x, signature->R);
+				bn_mod(signature->r, x, q);
+			} while (bn_is_zero(signature->r));
+
+			md_map(h, msg, len);
+			msg = h;
+			len = RLC_MD_LEN;
+
+			if (8 * len > (size_t) bn_bits(q)) {
+				len = RLC_CEIL(bn_bits(q), 8);
+				bn_read_bin(e, msg, len);
+				bn_rsh(e, e, 8 * len - bn_bits(q));
+			} else {
+				bn_read_bin(e, msg, len);
+			}
+
+			bn_mul(signature->s, secret_key->sk, signature->r);
+			bn_mod(signature->s, signature->s, q);
+			bn_add(signature->s, signature->s, e);
+			bn_mod(signature->s, signature->s, q);
+			bn_mod_inv(k_inverse, k, q);
+			bn_mul(signature->s, signature->s, k_inverse);
+			bn_mod(signature->s, signature->s, q);
+		} while (bn_is_zero(signature->s));
+
+		if (zk_dhtuple_prove(signature->pi, Y, R_tilde, signature->R, k) != RLC_OK) {
+			RLC_THROW(ERR_CAUGHT);
+		}
+	} RLC_CATCH_ANY {
+		result_status = RLC_ERR;
+	} RLC_FINALLY {
+		bn_free(q);
+		bn_free(k);
+		bn_free(k_inverse);
+		bn_free(x);
+		bn_free(e);
+		ec_free(R_tilde);
+	}
+
+	return result_status;
+}
+
+int adaptor_ecdsa_preverify(ecdsa_signature_t signature,
+														uint8_t *msg,
+														size_t len,
+														const ec_t Y,
+														const ec_public_key_t public_key) {
+	int result_status = 0;
+
+	bn_t q, s_inverse, e, u, v;
+	ec_t R_tilde;
+	uint8_t h[RLC_MD_LEN];
+
+	bn_null(q);
+	bn_null(s_inverse);
+	bn_null(e);
+	bn_null(u);
+	bn_null(v);
+	ec_null(R_tilde);
+
+	RLC_TRY {
+		bn_new(q);
+		bn_new(s_inverse);
+		bn_new(e);
+		bn_new(u);
+		bn_new(v);
+		ec_new(R_tilde);
+		
+		ec_curve_get_ord(q);
+
+		if (bn_sign(signature->r) == RLC_POS && bn_sign(signature->s) == RLC_POS &&
+				!bn_is_zero(signature->r) && !bn_is_zero(signature->s)) {
+			if (bn_cmp(signature->r, q) == RLC_LT && bn_cmp(signature->s, q) == RLC_LT) {
+				bn_mod_inv(s_inverse, signature->s, q);
+
+				md_map(h, msg, len);
+				msg = h;
+				len = RLC_MD_LEN;
+
+				if (8 * len > (size_t) bn_bits(q)) {
+					len = RLC_CEIL(bn_bits(q), 8);
+					bn_read_bin(e, msg, len);
+					bn_rsh(e, e, 8 * len - bn_bits(q));
+				} else {
+					bn_read_bin(e, msg, len);
+				}
+
+				bn_mul(u, e, s_inverse);
+				bn_mod(u, u, q);
+				bn_mul(v, signature->r, s_inverse);
+				bn_mod(v, v, q);
+
+				ec_mul_sim_gen(R_tilde, u, public_key->pk, v);
+				ec_get_x(v, signature->R);
+
+				bn_mod(v, v, q);
+
+				result_status = dv_cmp_const(v->dp, signature->r->dp, RLC_MIN(v->used, signature->r->used));
+				result_status = (result_status == RLC_NE ? 0 : 1);
+
+				if (v->used != signature->r->used) {
+					result_status = 0;
+				}
+
+				if (ec_is_infty(R_tilde) || ec_is_infty(signature->R)) {
+					result_status = 0;
+				}
+			}
+		}
+
+		if (zk_dhtuple_verify(signature->pi, Y, R_tilde, signature->R) != RLC_OK) {
+			result_status = 0;
+		}
+	} RLC_CATCH_ANY {
+		result_status = RLC_ERR;
+	} RLC_FINALLY {
+		bn_free(q);
+		bn_free(s_inverse);
+		bn_free(e);
+		bn_free(u);
+		bn_free(v);
+		ec_free(R_tilde);
+	}
+
+	return result_status;
 }
 
 int ps_blind_sign(ps_signature_t signature,

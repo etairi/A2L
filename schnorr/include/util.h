@@ -24,6 +24,8 @@
 #define TUMBLER_KEY_FILE_PREFIX "tumbler"
 #define KEY_FILE_EXTENSION "key"
 
+static uint8_t tx[2] = { 116, 120 }; // "tx"
+
 int init();
 int clean();
 
@@ -39,15 +41,19 @@ void deserialize_message(message_t *deserialized_message, const uint8_t *seriali
 
 int generate_keys_and_write_to_file(const cl_params_t params);
 int read_keys_from_file_alice_bob(const char *name,
-																	keys_t keys,
-																	cl_public_key_t tumbler_cl_public_key,
-																	ps_public_key_t tumbler_ps_public_key);
-int read_keys_from_file_tumbler(keys_t keys_alice,
-																keys_t keys_bob,
-																cl_public_key_t cl_public_key_alice,
-																cl_public_key_t cl_public_key_bob,
-																ps_secret_key_t ps_sk,
-																ps_public_key_t ps_pk);
+																	ec_secret_key_t ec_sk,
+																	ec_public_key_t ec_pk,
+																	ec_public_key_t tumbler_ec_pk,
+																	ps_public_key_t tumbler_ps_pk,
+																	cl_public_key_t tumbler_cl_pk);
+int read_keys_from_file_tumbler(ec_secret_key_t tumbler_ec_sk,
+																ec_public_key_t tumbler_ec_pk,
+																ps_secret_key_t tumbler_ps_sk,
+																ps_public_key_t tumbler_ps_pk,
+																cl_secret_key_t tumbler_cl_sk,
+																cl_public_key_t tumbler_cl_pk,
+																ec_public_key_t alice_ec_pk,
+																ec_public_key_t bob_ec_pk);
 
 int generate_cl_params(cl_params_t params);
 int cl_enc(cl_ciphertext_t ciphertext,
@@ -67,6 +73,17 @@ int ps_unblind(ps_signature_t signature,
 int ps_verify(const ps_signature_t signature,
 							bn_t message,
 						 	const ps_public_key_t public_key);
+
+int adaptor_schnorr_sign(schnorr_signature_t signature,
+												 uint8_t *msg,
+												 size_t len,
+												 const ec_t Y,
+												 const ec_secret_key_t secret_key);
+int adaptor_schnorr_preverify(schnorr_signature_t signature,
+															uint8_t *msg,
+															size_t len,
+															const ec_t Y,
+															const ec_public_key_t public_key);
 
 int pedersen_commit(pedersen_com_t com,
 										pedersen_decom_t decom,
