@@ -239,9 +239,6 @@ int generate_keys_and_write_to_file(const cl_params_t params) {
 		g2_write_bin(serialized_g2, RLC_G2_SIZE_COMPRESSED, ps_pk_tumbler->Y_2, 1);
 		fwrite(serialized_g2, sizeof(uint8_t), RLC_G2_SIZE_COMPRESSED, file);
 
-		printf("ec_pk_alice: ");
-		ec_print(ec_pk_alice);
-
 		fclose(file);
 
 		free(alice_key_file_name);
