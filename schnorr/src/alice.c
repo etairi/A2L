@@ -213,7 +213,6 @@ int token_share(alice_state_t state, void *socket) {
   }
 
   int result_status = RLC_OK;
-
   uint8_t *serialized_message = NULL;
 
   message_t token_share_msg;
@@ -324,7 +323,6 @@ int payment_init(alice_state_t state, void *socket) {
   }
 
   int result_status = RLC_OK;
-
   uint8_t *serialized_message = NULL;
 
   message_t payment_init_msg;
@@ -475,7 +473,6 @@ int puzzle_solution_share(alice_state_t state, void *socket) {
   }
 
   int result_status = RLC_OK;
-
   uint8_t *serialized_message = NULL;
 
   message_t puzzle_solution_share_msg;
@@ -605,6 +602,9 @@ int main(void)
     if (token_share(state, socket) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
+    stop_time = ttimer();
+    total_time = stop_time - start_time;
+    printf("Registration time plus token share: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
     if (rc != 0) {
@@ -685,6 +685,9 @@ int main(void)
     if (puzzle_solution_share(state, socket) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
+    stop_time = ttimer();
+    total_time = stop_time - start_time;
+    printf("Puzzle solver and solution share time: %.5f sec\n", total_time / CLOCK_PRECISION);
   } RLC_CATCH_ANY {
     result_status = RLC_ERR;
   } RLC_FINALLY {

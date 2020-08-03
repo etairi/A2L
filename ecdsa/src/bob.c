@@ -243,7 +243,6 @@ int puzzle_share(bob_state_t state, void *socket) {
   }
   
   int result_status = RLC_OK;
-
   uint8_t *serialized_message = NULL;
   
   message_t puzzle_share_msg;
@@ -482,6 +481,9 @@ int main(void)
         RLC_THROW(ERR_CAUGHT);
       }
     }
+    stop_time = ttimer();
+    total_time = stop_time - start_time;
+    printf("\nPuzzle promise time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
     if (rc != 0) {
