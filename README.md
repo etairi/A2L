@@ -1,6 +1,6 @@
 #  Anonymous Atomic Locks (A2L)
 
-A2L [1] is a secure, privacy-preserving, interoperable, and fungibility-preserving PCH. A2L builds on a novel cryptographic primitive that realizes a three-party protocol for conditional transactions, where the intermediary pays the receiver only if the latter solves a cryptographic challenge with the help of the sender. This repository includes implementation of A2L with instantiations based on Schnorr, ECDSA and DLSAG signatures.
+A2L [1] is a secure, privacy-preserving, interoperable, and fungibility-preserving PCH. A2L builds on a novel cryptographic primitive that realizes a three-party protocol for conditional transactions, where the intermediary pays the receiver only if the latter solves a cryptographic challenge with the help of the sender. This repository includes implementation of A2L with instantiations based on Schnor and ECDSA signatures.
 
 ## Dependencies
 
