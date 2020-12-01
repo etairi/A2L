@@ -333,6 +333,7 @@ int payment_init(alice_state_t state, void *socket) {
 
   cl_ciphertext_null(ctx_alpha_times_beta_times_tau);
   bn_null(q);
+  g1_mul_sim
 
   RLC_TRY {
     cl_ciphertext_new(ctx_alpha_times_beta_times_tau);
@@ -340,6 +341,9 @@ int payment_init(alice_state_t state, void *socket) {
     ec_curve_get_ord(q);
 
     // Homomorphically randomize the challenge ciphertext.
+    uint64_t start_time, stop_time, total_time;
+
+    start_time = ttimer();
     GEN tau_prime = randomi(state->cl_params->bound);
     bn_read_str(state->tau, GENtostr(tau_prime), strlen(GENtostr(tau_prime)), 10);
     bn_mod(state->tau, state->tau, q);
@@ -352,6 +356,10 @@ int payment_init(alice_state_t state, void *socket) {
     GEN plain_tau = strtoi(tau_str);
     ctx_alpha_times_beta_times_tau->c1 = nupow(state->ctx_alpha_times_beta->c1, plain_tau, NULL);
     ctx_alpha_times_beta_times_tau->c2 = nupow(state->ctx_alpha_times_beta->c2, plain_tau, NULL);
+
+    stop_time = ttimer();
+    total_time = stop_time - start_time;
+    printf("Re-randomization time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     if (adaptor_schnorr_sign(state->sigma_hat_s,
                              tx,

@@ -31,8 +31,14 @@ msg_handler_t get_message_handler(char *key) {
     case PUZZLE_SHARE:
       return puzzle_share_handler;
 
-    case PAYMENT_DONE:
-      return payment_done_handler;
+    case PAYMENT_INIT_DONE:
+      return payment_init_done_handler;
+
+    case PAYMENT_SIGN_DONE:
+      return payment_sign_done_handler;
+
+    case PUZZLE_SOLVE:
+      return puzzle_solve_handler;
 
     default:
       fprintf(stderr, "Error: invalid message type.\n");
@@ -180,22 +186,18 @@ int registration_done_handler(alice_state_t state, void *socket, uint8_t *data) 
     bn_new(t);
 
     // Deserialize the data from the message.
-    g1_read_bin(state->sigma_tid->sigma_1, data, RLC_G1_SIZE_COMPRESSED);
-    g1_read_bin(state->sigma_tid->sigma_2, data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED);
+    g1_read_bin(state->sigma->sigma_1, data, RLC_G1_SIZE_COMPRESSED);
+    g1_read_bin(state->sigma->sigma_2, data + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED);
 
-    if (ps_unblind(state->sigma_tid, state->pdecom) != RLC_OK) {
-      RLC_THROW(ERR_CAUGHT);
-    }
-
-    if (ps_verify(state->sigma_tid, state->tid, state->tumbler_ps_pk) != RLC_OK) {
+    if (ps_unblind(state->sigma, state->pdecom) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
     
     g1_get_ord(q);
     bn_rand_mod(t, q);
 
-    g1_mul(state->sigma_tid->sigma_1, state->sigma_tid->sigma_1, t);
-    g1_mul(state->sigma_tid->sigma_2, state->sigma_tid->sigma_2, t);
+    g1_mul(state->sigma->sigma_1, state->sigma->sigma_1, t);
+    g1_mul(state->sigma->sigma_2, state->sigma->sigma_2, t);
     REGISTRATION_COMPLETED = 1;
   } RLC_CATCH_ANY {
     result_status = RLC_ERR;
@@ -229,8 +231,8 @@ int token_share(alice_state_t state, void *socket) {
     
     // Serialize the data for the message.
     bn_write_bin(token_share_msg->data, RLC_BN_SIZE, state->tid);
-    g1_write_bin(token_share_msg->data + RLC_BN_SIZE, RLC_G1_SIZE_COMPRESSED, state->sigma_tid->sigma_1, 1);
-    g1_write_bin(token_share_msg->data + RLC_BN_SIZE + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, state->sigma_tid->sigma_2, 1);
+    g1_write_bin(token_share_msg->data + RLC_BN_SIZE, RLC_G1_SIZE_COMPRESSED, state->sigma->sigma_1, 1);
+    g1_write_bin(token_share_msg->data + RLC_BN_SIZE + RLC_G1_SIZE_COMPRESSED, RLC_G1_SIZE_COMPRESSED, state->sigma->sigma_2, 1);
 
     // Serialize the message.
     memcpy(token_share_msg->type, msg_type, msg_type_length);
@@ -256,7 +258,7 @@ int token_share(alice_state_t state, void *socket) {
     if (token_share_msg != NULL) message_free(token_share_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
- 
+
   return result_status;
 }
 
@@ -273,7 +275,7 @@ int puzzle_share_handler(alice_state_t state, void *socket, uint8_t *data) {
   RLC_TRY {
     // Deserialize the data from the message.
     ec_read_bin(state->g_to_the_alpha_times_beta, data, RLC_EC_SIZE_COMPRESSED);
-    
+
     char ctx_str[RLC_CL_CIPHERTEXT_SIZE];
     memcpy(ctx_str, data + RLC_EC_SIZE_COMPRESSED, RLC_CL_CIPHERTEXT_SIZE);
     state->ctx_alpha_times_beta->c1 = gp_read_str(ctx_str);
@@ -318,66 +320,21 @@ int puzzle_share_handler(alice_state_t state, void *socket, uint8_t *data) {
   return result_status;
 }
 
-int payment_init(alice_state_t state, void *socket) {
-  if (state == NULL) {
-    RLC_THROW(ERR_NO_VALID);
-  }
-
+int payment_init(void *socket) {
   int result_status = RLC_OK;
   uint8_t *serialized_message = NULL;
-
+  
   message_t payment_init_msg;
   message_null(payment_init_msg);
 
-  // NOTE: Commented parts are for doubly randomized version.
-  //cl_ciphertext_t ctx_alpha_times_beta_times_tau;
-  //bn_t q;
-
-  //cl_ciphertext_null(ctx_alpha_times_beta_times_tau);
-  //bn_null(q);
-
   RLC_TRY {
-    // cl_ciphertext_new(ctx_alpha_times_beta_times_tau);
-    // bn_new(q);
-    // ec_curve_get_ord(q);
-
-    // Homomorphically randomize the challenge ciphertext.
-    // GEN tau_prime = randomi(state->cl_params->bound);
-    // bn_read_str(state->tau, GENtostr(tau_prime), strlen(GENtostr(tau_prime)), 10);
-    // bn_mod(state->tau, state->tau, q);
-    // ec_mul(state->g_to_the_alpha_times_beta_times_tau, state->g_to_the_alpha_times_beta, state->tau);
-
-    // const unsigned tau_str_len = bn_size_str(state->tau, 10);
-    // char tau_str[tau_str_len];
-    // bn_write_str(tau_str, tau_str_len, state->tau, 10);
-
-    // GEN plain_tau = strtoi(tau_str);
-    // ctx_alpha_times_beta_times_tau->c1 = nupow(state->ctx_alpha_times_beta->c1, plain_tau, NULL);
-    // ctx_alpha_times_beta_times_tau->c2 = nupow(state->ctx_alpha_times_beta->c2, plain_tau, NULL);
-
-    if (adaptor_ecdsa_sign(state->sigma_hat_s,
-                           tx,
-                           sizeof(tx),
-                           state->g_to_the_alpha_times_beta, //state->g_to_the_alpha_times_beta_times_tau,
-                           state->alice_ec_sk) != RLC_OK) {
-      RLC_THROW(ERR_CAUGHT);
-    }
-
     // Build and define the message.
     char *msg_type = "payment_init";
     const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
-    const unsigned msg_data_length = (2 * RLC_BN_SIZE) + (2 * RLC_CL_CIPHERTEXT_SIZE);
+    const unsigned msg_data_length = 0;
     const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
     message_new(payment_init_msg, msg_type_length, msg_data_length);
-
-    // Serialize the data for the message.
-    bn_write_bin(payment_init_msg->data, RLC_BN_SIZE, state->sigma_hat_s->r);
-    bn_write_bin(payment_init_msg->data + RLC_BN_SIZE, RLC_BN_SIZE, state->sigma_hat_s->s);
-    memcpy(payment_init_msg->data + (2 * RLC_BN_SIZE),
-           GENtostr(state->ctx_alpha_times_beta->c1), RLC_CL_CIPHERTEXT_SIZE); //ctx_alpha_times_beta_times_tau->c1
-    memcpy(payment_init_msg->data + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE,
-           GENtostr(state->ctx_alpha_times_beta->c2), RLC_CL_CIPHERTEXT_SIZE); //ctx_alpha_times_beta_times_tau->c2
-
+    
     // Serialize the message.
     memcpy(payment_init_msg->type, msg_type, msg_type_length);
     serialize_message(&serialized_message, payment_init_msg, msg_type_length, msg_data_length);
@@ -393,14 +350,13 @@ int payment_init(alice_state_t state, void *socket) {
     memcpy(zmq_msg_data(&payment_init), serialized_message, total_msg_length);
     rc = zmq_msg_send(&payment_init, socket, ZMQ_DONTWAIT);
     if (rc != total_msg_length) {
+      printf("%s\n", zmq_strerror(errno));
       fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
       RLC_THROW(ERR_CAUGHT);
     }
   } RLC_CATCH_ANY {
     result_status = RLC_ERR;
   } RLC_FINALLY {
-    //cl_ciphertext_free(ctx_alpha_times_beta_times_tau);
-    //bn_free(q);
     if (payment_init_msg != NULL) message_free(payment_init_msg);
     if (serialized_message != NULL) free(serialized_message);
   }
@@ -408,61 +364,376 @@ int payment_init(alice_state_t state, void *socket) {
   return result_status;
 }
 
-int payment_done_handler(alice_state_t state, void *socket, uint8_t *data) {
+int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data) {
   if (state == NULL || data == NULL) {
     RLC_THROW(ERR_NO_VALID);
   }
 
   int result_status = RLC_OK;
 
-  bn_t q, x, sigma_s_inverse, gamma; //tau_inverse
-  ec_t g_to_the_gamma;
+  uint8_t *serialized_message = NULL;
+
+  message_t payment_sign_msg;
+  message_null(payment_sign_msg);
+
+  bn_t q, s;
+  cl_ciphertext_t ctx_alpha_times_beta_times_tau;
+  zk_proof_t pi_1;
+
+  bn_null(q);
+  bn_null(s);
+  cl_ciphertext_null(ctx_alpha_times_beta_times_tau);
+  zk_proof_null(pi_1);
+
+  RLC_TRY {
+    bn_new(q);
+    bn_new(s);
+    cl_ciphertext_new(ctx_alpha_times_beta_times_tau);
+    zk_proof_new(pi_1);
+
+    ec_curve_get_ord(q);
+
+    bn_rand_mod(state->k_1, q);
+    ec_mul_gen(state->R_1, state->k_1);
+
+    if (zk_dlog_prove(pi_1, state->R_1, state->k_1) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    // Homomorphically randomize the challenge ciphertext.
+    GEN tau_prime = randomi(state->cl_params->bound);
+    bn_read_str(state->tau, GENtostr(tau_prime), strlen(GENtostr(tau_prime)), 10);
+    bn_mod(state->tau, state->tau, q);
+    
+    const unsigned tau_str_len = bn_size_str(state->tau, 10);
+    char tau_str[tau_str_len];
+    bn_write_str(tau_str, tau_str_len, state->tau, 10);
+
+    GEN plain_tau = strtoi(tau_str);
+    ctx_alpha_times_beta_times_tau->c1 = nupow(state->ctx_alpha_times_beta->c1, plain_tau, NULL);
+    ctx_alpha_times_beta_times_tau->c2 = nupow(state->ctx_alpha_times_beta->c2, plain_tau, NULL);
+
+    // Deserialize the data from the message.
+    bn_read_bin(state->com->c, data, RLC_BN_SIZE);
+    ec_read_bin(state->com->r, data + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
+
+    // Build and define the message.
+    char *msg_type = "payment_sign";
+    const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
+    const unsigned msg_data_length = (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + (2 * RLC_CL_CIPHERTEXT_SIZE);
+    const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
+    message_new(payment_sign_msg, msg_type_length, msg_data_length);
+
+    // Serialize the data for the message.
+    ec_write_bin(payment_sign_msg->data, RLC_EC_SIZE_COMPRESSED, state->R_1, 1);
+    ec_write_bin(payment_sign_msg->data + RLC_EC_SIZE_COMPRESSED, RLC_EC_SIZE_COMPRESSED, pi_1->a, 1);
+    bn_write_bin(payment_sign_msg->data + (2 * RLC_EC_SIZE_COMPRESSED), RLC_BN_SIZE, pi_1->z);
+    memcpy(payment_sign_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE,
+           GENtostr(ctx_alpha_times_beta_times_tau->c1), RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(payment_sign_msg->data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE + RLC_CL_CIPHERTEXT_SIZE,
+           GENtostr(ctx_alpha_times_beta_times_tau->c2), RLC_CL_CIPHERTEXT_SIZE);
+
+    // Serialize the message.
+    memcpy(payment_sign_msg->type, msg_type, msg_type_length);
+    serialize_message(&serialized_message, payment_sign_msg, msg_type_length, msg_data_length);
+
+    // Send the message.
+    zmq_msg_t payment_sign;
+    int rc = zmq_msg_init_size(&payment_sign, total_msg_length);
+    if (rc < 0) {
+      fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    memcpy(zmq_msg_data(&payment_sign), serialized_message, total_msg_length);
+    rc = zmq_msg_send(&payment_sign, socket, ZMQ_DONTWAIT);
+    if (rc != total_msg_length) {
+      fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+  } RLC_CATCH_ANY {
+    result_status = RLC_ERR;
+  } RLC_FINALLY {
+    bn_free(q);
+    bn_free(s);
+    cl_ciphertext_free(ctx_alpha_times_beta_times_tau);
+    zk_proof_free(pi_1);
+    if (payment_sign_msg != NULL) message_free(payment_sign_msg);
+    if (serialized_message != NULL) free(serialized_message);
+  }
+
+  return result_status;
+}
+
+int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data) {
+  if (state == NULL || data == NULL) {
+    RLC_THROW(ERR_NO_VALID);
+  }
+
+  int result_status = RLC_OK;
+
+  int tx_len = sizeof(tx);
+  uint8_t *tx_msg = NULL;
+  uint8_t hash[RLC_MD_LEN];
+  uint8_t *serialized_message = NULL;
+
+  message_t payment_end_msg;
+  message_null(payment_end_msg);
+
+  bn_t q, e, r, x;
+  bn_t s_1, s_2, k_1_inverse;
+  ec_t R_2, R_c, R, com_x, g_to_the_gamma;
+  ec_t R_2_to_the_s_2, pk_to_the_r;
+  ec_t A_prime_to_the_tau;
+  ec_t g_to_the_e, pk_to_the_r_times_g_to_the_e;
+
+  zk_proof_t pi_2;
+  zk_proof_t pi_gamma;
+  cl_ciphertext_t ctx;
+
+  bn_null(q);
+  bn_null(e);
+  bn_null(r);
+  bn_null(x);
+  bn_null(s_1);
+  bn_null(s_2);
+  bn_null(k_1_inverse);
+  ec_null(g_to_the_gamma);
+  ec_null(g_to_the_e);
+  ec_null(pk_to_the_r);
+  ec_null(pk_to_the_r_times_g_to_the_e);
+  ec_null(A_prime_to_the_tau);
+  ec_null(R_2_to_the_s_2);
+  ec_null(R_2);
+  ec_null(R_c);
+  ec_null(R);
+  ec_null(com_x);
+
+  zk_proof_null(pi_2);
+  zk_proof_null(pi_gamma);
+  cl_ciphertext_null(ctx);
+
+  RLC_TRY {
+    bn_new(q);
+    bn_new(e);
+    bn_new(r);
+    bn_new(x);
+    bn_new(s_1);
+    bn_new(s_2);
+    bn_new(k_1_inverse);
+    ec_new(g_to_the_gamma);
+    ec_new(g_to_the_e);
+    ec_new(pk_to_the_r);
+    ec_new(pk_to_the_r_times_g_to_the_e);
+    ec_new(A_prime_to_the_tau);
+    ec_new(R_2_to_the_s_2);
+    ec_new(R_2);
+    ec_new(R_c);
+    ec_new(R);
+    ec_new(com_x);
+
+    zk_proof_new(pi_2);
+    zk_proof_new(pi_gamma);
+    cl_ciphertext_new(ctx);
+
+    // Deserialize the data from the message.
+    ec_read_bin(R_2, data, RLC_EC_SIZE_COMPRESSED);
+    ec_read_bin(pi_2->a, data + RLC_EC_SIZE_COMPRESSED, RLC_EC_SIZE_COMPRESSED);
+    bn_read_bin(pi_2->z, data + (2 * RLC_EC_SIZE_COMPRESSED), RLC_BN_SIZE);
+    ec_read_bin(g_to_the_gamma, data + (2 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
+    ec_read_bin(R_c, data + (3 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
+    ec_read_bin(pi_gamma->a, data + (4 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
+    ec_read_bin(pi_gamma->b, data + (5 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_EC_SIZE_COMPRESSED);
+    bn_read_bin(pi_gamma->z, data + (6 * RLC_EC_SIZE_COMPRESSED) + RLC_BN_SIZE, RLC_BN_SIZE);
+
+    char ctx_str[RLC_CL_CIPHERTEXT_SIZE];
+    memcpy(ctx_str, data + (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE), RLC_CL_CIPHERTEXT_SIZE);
+    ctx->c1 = gp_read_str(ctx_str);
+    memzero(ctx_str, RLC_CL_CIPHERTEXT_SIZE);
+    memcpy(ctx_str, data + (6 * RLC_EC_SIZE_COMPRESSED) + (2 * RLC_BN_SIZE) + RLC_CL_CIPHERTEXT_SIZE, RLC_CL_CIPHERTEXT_SIZE);
+    ctx->c2 = gp_read_str(ctx_str);
+
+    // Verify the commitment and ZK proofs.
+    ec_add(com_x, R_2, pi_2->a);
+    if (decommit(state->com, com_x) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    if (zk_dlog_verify(pi_2, R_2) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+    if (zk_dhtuple_verify(pi_gamma, R_2, g_to_the_gamma, R_c) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    // Sanity check.
+    ec_mul(A_prime_to_the_tau, state->g_to_the_alpha_times_beta, state->tau);
+    ec_norm(A_prime_to_the_tau, A_prime_to_the_tau);
+    if (ec_cmp(A_prime_to_the_tau, g_to_the_gamma) != RLC_EQ) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    // Compute the half ECDSA signature.
+    ec_mul(R, R_c, state->k_1);
+    ec_norm(R, R);
+
+    ec_curve_get_ord(q);
+    ec_get_x(x, R);
+    bn_mod(r, x, q);
+    if (bn_is_zero(r)) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    md_map(hash, tx, tx_len);
+    tx_msg = hash;
+    tx_len = RLC_MD_LEN;
+
+		if (8 * tx_len > bn_bits(q)) {
+			tx_len = RLC_CEIL(bn_bits(q), 8);
+			bn_read_bin(e, tx_msg, tx_len);
+			bn_rsh(e, e, 8 * tx_len - bn_bits(q));
+		} else {
+			bn_read_bin(e, tx_msg, tx_len);
+		}
+
+    GEN plain_s_2;
+    if (cl_dec(&plain_s_2, ctx, state->keys->cl_sk, state->cl_params) != RLC_OK) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+    bn_read_str(s_2, GENtostr(plain_s_2), strlen(GENtostr(plain_s_2)), 10);
+
+    // Check correctness of the partial signature received.
+    ec_mul(R_2_to_the_s_2, R_2, s_2);
+    ec_norm(R_2_to_the_s_2, R_2_to_the_s_2);
+
+    ec_mul(pk_to_the_r, state->keys->ec_pk->pk, r);
+    ec_mul_gen(g_to_the_e, e);
+    ec_add(pk_to_the_r_times_g_to_the_e, pk_to_the_r, g_to_the_e);
+    ec_norm(pk_to_the_r_times_g_to_the_e, pk_to_the_r_times_g_to_the_e);
+    if (ec_cmp(R_2_to_the_s_2, pk_to_the_r_times_g_to_the_e) != RLC_EQ) {
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    bn_gcd_ext(x, k_1_inverse, NULL, state->k_1, q);
+    if (bn_sign(k_1_inverse) == RLC_NEG) {
+      bn_add(k_1_inverse, k_1_inverse, q);
+    }
+
+    // Compute the "almost" signature.
+		bn_mul(state->s_hat, s_2, k_1_inverse);
+    bn_mod(state->s_hat, state->s_hat, q);
+
+    // Build and define the message.
+    char *msg_type = "payment_end";
+    const unsigned msg_type_length = (unsigned) strlen(msg_type) + 1;
+    const unsigned msg_data_length = RLC_BN_SIZE;
+    const int total_msg_length = msg_type_length + msg_data_length + (2 * sizeof(unsigned));
+    message_new(payment_end_msg, msg_type_length, msg_data_length);
+    
+    // Serialize the data for the message.
+    bn_write_bin(payment_end_msg->data, RLC_BN_SIZE, state->s_hat);
+
+    // Serialize the message.
+    memcpy(payment_end_msg->type, msg_type, msg_type_length);
+    serialize_message(&serialized_message, payment_end_msg, msg_type_length, msg_data_length);
+
+    // Send the message.
+    zmq_msg_t payment_end;
+    int rc = zmq_msg_init_size(&payment_end, total_msg_length);
+    if (rc < 0) {
+      fprintf(stderr, "Error: could not initialize the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+
+    memcpy(zmq_msg_data(&payment_end), serialized_message, total_msg_length);
+    rc = zmq_msg_send(&payment_end, socket, ZMQ_DONTWAIT);
+    if (rc != total_msg_length) {
+      fprintf(stderr, "Error: could not send the message (%s).\n", msg_type);
+      RLC_THROW(ERR_CAUGHT);
+    }
+  } RLC_CATCH_ANY {
+    result_status = RLC_ERR;
+  } RLC_FINALLY {
+    bn_free(q);
+    bn_free(e);
+    bn_free(r);
+    bn_free(x);
+    bn_free(s_1);
+    bn_free(s_2);
+    bn_free(k_1_inverse);
+    ec_free(g_to_the_gamma);
+    ec_free(g_to_the_e);
+    ec_free(pk_to_the_r);
+    ec_free(pk_to_the_r_times_g_to_the_e);
+    ec_free(A_prime_to_the_tau);
+    ec_free(R_2_to_the_s_2);
+    ec_free(R_2);
+    ec_free(R_c);
+    ec_free(R);
+    ec_free(com_x);
+    zk_proof_free(pi_2);
+    zk_proof_free(pi_gamma);
+    cl_ciphertext_free(ctx);
+    if (payment_end_msg != NULL) message_free(payment_end_msg);
+    if (serialized_message != NULL) free(serialized_message);
+  }
+
+  return result_status;
+}
+
+int puzzle_solve_handler(alice_state_t state, void *socket, uint8_t *data) {
+  if (state == NULL || data == NULL) {
+    RLC_THROW(ERR_NO_VALID);
+  }
+
+  int result_status = RLC_OK;
+
+  bn_t q, x, gamma;
+  bn_t gamma_inverse;
+  bn_t tau_inverse;
+  bn_t s_hat_inverse;
 
   bn_null(q);
   bn_null(x);
-  bn_null(sigma_s_inverse);
   bn_null(gamma);
-  //bn_null(tau_inverse);
-  ec_null(g_to_the_gamma);
+  bn_null(gamma_inverse);
+  bn_null(tau_inverse);
+  bn_null(s_hat_inverse);
 
   RLC_TRY {
     bn_new(q);
     bn_new(x);
-    bn_new(sigma_s_inverse);
     bn_new(gamma);
-    //bn_new(tau_inverse);
-    ec_new(g_to_the_gamma);
-
-    ec_curve_get_ord(q);
+    bn_new(gamma_inverse);
+    bn_new(tau_inverse);
+    bn_new(s_hat_inverse);
 
     // Deserialize the data from the message.
-    bn_read_bin(state->sigma_s->r, data, RLC_BN_SIZE);
-    bn_read_bin(state->sigma_s->s, data + RLC_BN_SIZE, RLC_BN_SIZE);
+    bn_read_bin(state->s, data, RLC_BN_SIZE);
 
-    // Extract the secret value.
-    bn_gcd_ext(x, sigma_s_inverse, NULL, state->sigma_s->s, q);
-    if (bn_sign(sigma_s_inverse) == RLC_NEG) {
-      bn_add(sigma_s_inverse, sigma_s_inverse, q);
+    // Extract the randomized secret.
+    ec_curve_get_ord(q);
+
+    bn_gcd_ext(x, s_hat_inverse, NULL, state->s_hat, q);
+    if (bn_sign(s_hat_inverse) == RLC_NEG) {
+      bn_add(s_hat_inverse, s_hat_inverse, q);
     }
 
-		bn_mul(gamma, sigma_s_inverse, state->sigma_hat_s->s);
-		bn_mod(gamma, gamma, q);
+    bn_mul(gamma_inverse, state->s, s_hat_inverse);
+    bn_mod(gamma_inverse, gamma_inverse, q);
 
-    // Verify the extracted secret.
-    ec_mul_gen(g_to_the_gamma, gamma);
-    if (ec_cmp(state->g_to_the_alpha_times_beta, g_to_the_gamma) != RLC_EQ) { // state->g_to_the_alpha_times_beta_times_tau
-      RLC_THROW(ERR_CAUGHT);
+    bn_gcd_ext(x, gamma, NULL, gamma_inverse, q);
+    if (bn_sign(gamma) == RLC_NEG) {
+      bn_add(gamma, gamma, q);
     }
 
-    // Derandomize the extracted secret.
-    // bn_gcd_ext(x, tau_inverse, NULL, state->tau, q);
-    // if (bn_sign(tau_inverse) == RLC_NEG) {
-    //   bn_add(tau_inverse, tau_inverse, q);
-    // }
+    bn_gcd_ext(x, tau_inverse, NULL, state->tau, q);
+    if (bn_sign(tau_inverse) == RLC_NEG) {
+      bn_add(tau_inverse, tau_inverse, q);
+    }
 
-    // bn_mul(state->alpha_hat, gamma, tau_inverse);
-    // bn_mod(state->alpha_hat, state->alpha_hat, q);
-    bn_copy(state->alpha_hat, gamma);
+    bn_mul(state->alpha_hat, gamma, tau_inverse);
+    bn_mod(state->alpha_hat, state->alpha_hat, q);
 
     PUZZLE_SOLVED = 1;
   } RLC_CATCH_ANY {
@@ -470,11 +741,12 @@ int payment_done_handler(alice_state_t state, void *socket, uint8_t *data) {
   } RLC_FINALLY {
     bn_free(q);
     bn_free(x);
-    bn_free(sigma_s_inverse);
-    //bn_free(tau_inverse);
-    ec_free(g_to_the_gamma);
+    bn_free(gamma);
+    bn_free(gamma_inverse);
+    bn_free(tau_inverse);
+    bn_free(s_hat_inverse);
   }
- 
+
   return result_status;
 }
 
@@ -484,6 +756,7 @@ int puzzle_solution_share(alice_state_t state, void *socket) {
   }
 
   int result_status = RLC_OK;
+
   uint8_t *serialized_message = NULL;
 
   message_t puzzle_solution_share_msg;
@@ -569,11 +842,9 @@ int main(void)
     }
 
     if (read_keys_from_file_alice_bob(ALICE_KEY_FILE_PREFIX,
-                                      state->alice_ec_sk,
-                                      state->alice_ec_pk,
-                                      state->tumbler_ec_pk,
-                                      state->tumbler_ps_pk,
-                                      state->tumbler_cl_pk) != RLC_OK) {
+                                      state->keys,
+                                      state->tumbler_cl_pk,
+                                      state->tumbler_ps_pk) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
 
@@ -589,7 +860,7 @@ int main(void)
     }
     stop_time = ttimer();
     total_time = stop_time - start_time;
-    printf("Registration time: %.5f sec\n", total_time / CLOCK_PRECISION);
+    printf("\nRegistration time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
     if (rc != 0) {
@@ -613,9 +884,6 @@ int main(void)
     if (token_share(state, socket) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
-    stop_time = ttimer();
-    total_time = stop_time - start_time;
-    printf("Registration time plus token share: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
     if (rc != 0) {
@@ -661,7 +929,7 @@ int main(void)
     }
 
     start_time = ttimer();
-    if (payment_init(state, socket) != RLC_OK) {
+    if (payment_init(socket) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
 
@@ -670,9 +938,10 @@ int main(void)
         RLC_THROW(ERR_CAUGHT);
       }
     }
+    
     stop_time = ttimer();
     total_time = stop_time - start_time;
-    printf("Puzzle solver time: %.5f sec\n", total_time / CLOCK_PRECISION);
+    printf("\nPuzzle solver time: %.5f sec\n", total_time / CLOCK_PRECISION);
 
     rc = zmq_close(socket);
     if (rc != 0) {
@@ -696,9 +965,6 @@ int main(void)
     if (puzzle_solution_share(state, socket) != RLC_OK) {
       RLC_THROW(ERR_CAUGHT);
     }
-    stop_time = ttimer();
-    total_time = stop_time - start_time;
-    printf("Puzzle solver and solution share time: %.5f sec\n", total_time / CLOCK_PRECISION);
   } RLC_CATCH_ANY {
     result_status = RLC_ERR;
   } RLC_FINALLY {

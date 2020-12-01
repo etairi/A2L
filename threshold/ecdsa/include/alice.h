@@ -11,10 +11,16 @@
 #define ALICE_ENDPOINT    "tcp://*:8182"
 #define BOB_ENDPOINT      "tcp://localhost:8183"
 
+static uint8_t tx[2] = { 116, 120 }; // "tx"
+
 typedef enum {
   REGISTRATION_DONE,
+  PROMISE_SENT,
   PUZZLE_SHARE,
-  PAYMENT_DONE,
+  PUZZLE_SOLVE,
+  PAYMENT_INIT_DONE,
+  PAYMENT_SIGN_DONE,
+  PAYMENT_COMPLETE
 } msgcode_t;
 
 typedef struct {
@@ -24,29 +30,33 @@ typedef struct {
 
 static symstruct_t msg_lookuptable[] = {
   { "registration_done", REGISTRATION_DONE },
+  { "promise_sent", PROMISE_SENT },
   { "puzzle_share", PUZZLE_SHARE },
-  { "payment_done", PAYMENT_DONE }
+  { "payment_init_done", PAYMENT_INIT_DONE },
+  { "payment_sign_done", PAYMENT_SIGN_DONE },
+  { "payment_complete", PAYMENT_COMPLETE },
+  { "puzzle_solve", PUZZLE_SOLVE }
 };
 
 #define TOTAL_MESSAGES (sizeof(msg_lookuptable) / sizeof(symstruct_t))
 
 typedef struct {
-  ec_secret_key_t alice_ec_sk;
-  ec_public_key_t alice_ec_pk;
-  ec_public_key_t tumbler_ec_pk;
-  ps_public_key_t tumbler_ps_pk;
-  cl_public_key_t tumbler_cl_pk;
+  keys_t keys;
   cl_params_t cl_params;
+  cl_public_key_t tumbler_cl_pk;
+  ps_public_key_t tumbler_ps_pk;
   commit_t com;
   ec_t g_to_the_alpha_times_beta;
-  //ec_t g_to_the_alpha_times_beta_times_tau;
   cl_ciphertext_t ctx_alpha_times_beta;
-  ecdsa_signature_t sigma_hat_s;
-  ecdsa_signature_t sigma_s;
-  //bn_t tau;
+  bn_t k_1;
+  ec_t R_1;
+  bn_t s_hat;
+  bn_t s;
+  bn_t e;
+  bn_t tau;
   bn_t alpha_hat;
   bn_t tid;
-  ps_signature_t sigma_tid;
+  ps_signature_t sigma;
   pedersen_com_t pcom;
   pedersen_decom_t pdecom;
 } alice_state_st;
@@ -61,49 +71,49 @@ typedef alice_state_st *alice_state_t;
     if (state == NULL) {                                    \
       RLC_THROW(ERR_NO_MEMORY);                             \
     }                                                       \
-    ec_secret_key_new((state)->alice_ec_sk);                \
-    ec_public_key_new((state)->alice_ec_pk);                \
-    ec_public_key_new((state)->tumbler_ec_pk);              \
-    ps_public_key_new((state)->tumbler_ps_pk);              \
-    cl_public_key_new((state)->tumbler_cl_pk);              \
+    keys_new((state)->keys);                                \
     cl_params_new((state)->cl_params);                      \
+    cl_public_key_new((state)->tumbler_cl_pk);              \
+    ps_public_key_new((state)->tumbler_ps_pk);              \
     commit_new((state)->com);                               \
     ec_new((state)->g_to_the_alpha_times_beta);             \
     cl_ciphertext_new((state)->ctx_alpha_times_beta);       \
-    ecdsa_signature_new((state)->sigma_hat_s);              \
-    ecdsa_signature_new((state)->sigma_s);                  \
+    bn_new((state)->k_1);                                   \
+    ec_new((state)->R_1);                                   \
+    bn_new((state)->s_hat);                                 \
+    bn_new((state)->s);                                     \
+    bn_new((state)->e);                                     \
+    bn_new((state)->tau);                                   \
     bn_new((state)->alpha_hat);                             \
     bn_new((state)->tid);                                   \
-    ps_signature_new((state)->sigma_tid);                   \
+    ps_signature_new((state)->sigma);                       \
     pedersen_com_new((state)->pcom);                        \
     pedersen_decom_new((state)->pdecom);                    \
   } while (0)
-  // ec_new((state)->g_to_the_alpha_times_beta_times_tau);
-  // bn_new((state)->tau);
 
 #define alice_state_free(state)                             \
   do {                                                      \
-    ec_secret_key_free((state)->alice_ec_sk);               \
-    ec_public_key_free((state)->alice_ec_pk);               \
-    ec_public_key_free((state)->tumbler_ec_pk);             \
-    ps_public_key_free((state)->tumbler_ps_pk);             \
-    cl_public_key_free((state)->tumbler_cl_pk);             \
+    keys_free((state)->keys);                               \
     cl_params_free((state)->cl_params);                     \
+    cl_public_key_free((state)->tumbler_cl_pk);             \
+    ps_public_key_free((state)->tumbler_ps_pk);             \
     commit_free((state)->com);                              \
     ec_free((state)->g_to_the_alpha_times_beta);            \
     cl_ciphertext_free((state)->ctx_alpha_times_beta);      \
-    ecdsa_signature_free((state)->sigma_hat_s);             \
-    ecdsa_signature_free((state)->sigma_s);                 \
+    bn_free((state)->k_1);                                  \
+    ec_free((state)->R_1);                                  \
+    bn_free((state)->s_hat);                                \
+    bn_free((state)->s);                                    \
+    bn_free((state)->e);                                    \
+    bn_free((state)->tau);                                  \
     bn_free((state)->alpha_hat);                            \
     bn_free((state)->tid);                                  \
-    ps_signature_free((state)->sigma_tid);                  \
+    ps_signature_free((state)->sigma);                      \
     pedersen_com_new((state)->pcom);                        \
     pedersen_decom_new((state)->pdecom);                    \
     free(state);                                            \
     state = NULL;                                           \
   } while (0)
-  // ec_free((state)->g_to_the_alpha_times_beta_times_tau);
-  // bn_free((state)->tau);
 
 typedef int (*msg_handler_t)(alice_state_t, void*, uint8_t*);
 
@@ -116,8 +126,10 @@ int registration(alice_state_t state, void *socket);
 int registration_done_handler(alice_state_t state, void *socket, uint8_t *data);
 int token_share(alice_state_t state, void *socket);
 int puzzle_share_handler(alice_state_t state, void *socket, uint8_t *data);
-int payment_init(alice_state_t state, void *socket);
-int payment_done_handler(alice_state_t state, void *socket, uint8_t *data);
+int payment_init(void *socket);
+int payment_init_done_handler(alice_state_t state, void *socket, uint8_t *data);
+int payment_sign_done_handler(alice_state_t state, void *socket, uint8_t *data);
+int puzzle_solve_handler(alice_state_t state, void *socket, uint8_t *data);
 int puzzle_solution_share(alice_state_t state, void *socket);
 
 #endif // A2L_ECDSA_INCLUDE_ALICE
