@@ -333,7 +333,6 @@ int payment_init(alice_state_t state, void *socket) {
 
   cl_ciphertext_null(ctx_alpha_times_beta_times_tau);
   bn_null(q);
-  g1_mul_sim
 
   RLC_TRY {
     cl_ciphertext_new(ctx_alpha_times_beta_times_tau);

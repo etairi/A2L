@@ -4,11 +4,11 @@ A2L [1] is a cryptographic construction for building secure, privacy-preserving,
 
 ## Dependencies
 
-* [CMake](https://cmake.org/download/) >= 3.12
+* [CMake](https://cmake.org/download/) >= 3.23.0
 * [ZeroMQ](https://github.com/zeromq/libzmq)
-* [GMP](https://gmplib.org/) >= 6.1.2
-* [RELIC](https://github.com/relic-toolkit/relic) (configured with `-DARITH=gmp`)
-* [PARI/GP](https://pari.math.u-bordeaux.fr/) >= 2.11.2
+* [GMP](https://gmplib.org/) >= 6.2.1
+* [RELIC](https://github.com/relic-toolkit/relic) (configured and built with `-DARITH=gmp`)
+* [PARI/GP](https://pari.math.u-bordeaux.fr/) >= 2.13.4
 
 ## Warning
 

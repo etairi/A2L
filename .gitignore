@@ -34,7 +34,7 @@ build/
 lib/
 
 # Threshold implementation
-#threshold/
+threshold/
 
 # VS Code directory
 .vscode
